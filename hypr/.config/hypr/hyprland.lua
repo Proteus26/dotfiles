@@ -71,7 +71,7 @@ local browser     = "firefox"
 
 hl.on("hyprland.start", function()
   hl.exec_cmd("vicinae server")
-  hl.exec_cmd("waybar")
+  hl.exec_cmd("quickshell")
   hl.exec_cmd("hyprpaper")
 end)
 
@@ -314,6 +314,7 @@ hl.bind(mainMod .. " + Z", hl.dsp.window.float({ action = "toggle" }))
 hl.bind(mainMod .. " + SUPER_L", hl.dsp.exec_cmd(menu))
 hl.bind(mainMod .. " + V", hl.dsp.exec_cmd("vicinae vicinae://launch/clipboard/history"))
 hl.bind(mainMod .. " + P", hl.dsp.window.pseudo())
+hl.bind(mainMod .. " + N", hl.dsp.exec_cmd("qs ipc call notifications toggle"))
 -- hl.bind(mainMod .. " + J", hl.dsp.layout("togglesplit"))    -- dwindle only
 
 -- Move focus with mainMod + arrow keys

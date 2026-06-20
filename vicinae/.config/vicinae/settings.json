@@ -19,5 +19,15 @@
       "dark": {
          "name": "catppuccin-mocha"
       }
+   },
+   "providers": {
+      "clipboard": {
+         "preferences": {
+            "encryption": false,
+            "eraseOnStartup": true,
+            "ignorePasswords": true,
+            "monitoring": true
+         }
+      }
    }
 }
