@@ -178,22 +178,8 @@ Scope {
 
 					Item { width: 4 }
 
-					Rectangle {
-						Layout.preferredWidth: 24
-						Layout.preferredHeight: 24
-						color: "transparent"
-
-						Image {
-							anchors.fill: parent
-							source: "file:///home/proteus/Pictures/pokeball.png"
-							fillMode: Image.PreserveAspectFit
-						}
-					}
-
-					Item { width: 4 }
-
 					Repeater {
-						model: 9
+						model: 10 
 
 						Rectangle {
 							Layout.preferredWidth: 20
@@ -205,7 +191,7 @@ Scope {
 							property bool hasWindows: workspace !== null
 
 							Text {
-								text: index + 1
+								text: index === 9 ? "0" : index + 1
 								color: parent.isActive ? Config.colors.sapphire : (parent.hasWindows ? Config.colors.sapphire : Config.colors.subtext0)
 								font.pixelSize: Config.bar.fontSize
 								font.family: Config.bar.fontFamily

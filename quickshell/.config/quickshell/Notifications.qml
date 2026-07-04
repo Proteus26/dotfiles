@@ -40,84 +40,88 @@ Scope {
 	}
 
 	//notification 
-	PanelWindow {
-		anchors { top: true; right: true }
-		margins { top: 12; right: 12 }
+	Variants {
+		model: Quickshell.screens
 
-		implicitWidth: 380
-		implicitHeight: Math.max(1, column.implicitHeight)
-		color: "transparent"
+		PanelWindow {
+			anchors { top: true; right: true }
+			margins { top: 12; right: 12 }
 
-		exclusionMode: ExclusionMode.Normal
+			implicitWidth: 380
+			implicitHeight: Math.max(1, column.implicitHeight)
+			color: "transparent"
 
-		ColumnLayout {
-			id: column
-			width: parent.width
-			spacing: 10
+			exclusionMode: ExclusionMode.Normal
 
-			Repeater {
-				model: server.trackedNotifications
-				delegate: Rectangle {
-					id: card
-					required property var modelData
+			ColumnLayout {
+				id: column
+				width: parent.width
+				spacing: 10
 
-					Timer {
-						running: card.modelData.urgency != NotificationUrgency.Critical
-						interval: Config.notifications.timeout
-						onTriggered: card.modelData.dismiss()
-					}
+				Repeater {
+					model: server.trackedNotifications
+					delegate: Rectangle {
+						id: card
+						required property var modelData
 
-					Layout.fillWidth: true
-					Layout.preferredHeight: layout.implicitHeight + 20
-					radius: 8
-					color: Config.colors.base
-					border.width: 2
-					border.color: modelData.urgency === NotificationUrgency.Critical ? Config.colors.red : Config.colors.mauve
-
-					RowLayout {
-						id: layout
-						anchors.fill: parent
-						anchors.margins: 10
-						spacing: 10
-
-						Image {
-							Layout.preferredHeight: 36
-							Layout.preferredWidth: 36
-							Layout.alignment: Qt.AlignTop
-							fillMode: Image.PreserveAspectFit
-							visible: source.toString() !== ""
-							source: card.modelData.image || card.modelData.appIcon || ""
+						Timer {
+							running: card.modelData.urgency != NotificationUrgency.Critical
+							interval: Config.notifications.timeout
+							onTriggered: card.modelData.dismiss()
 						}
 
-						ColumnLayout {
-							Layout.fillWidth: true
-							spacing: 2
+						Layout.fillWidth: true
+						Layout.preferredHeight: layout.implicitHeight + 20
+						radius: 8
+						color: Config.colors.base
+						border.width: 2
+						border.color: modelData.urgency === NotificationUrgency.Critical ? Config.colors.red : Config.colors.mauve
 
-							Text {
-								Layout.fillWidth: true
-								text: card.modelData.summary
-								color: Config.colors.sky
-								font.family: Config.bar.fontFamily
-								font.pixelSize: Config.bar.fontSize
-								font.bold: true
-								elide: Text.ElideRight
+						RowLayout {
+							id: layout
+							anchors.fill: parent
+							anchors.margins: 10
+							spacing: 10
+
+							Image {
+								Layout.preferredHeight: 36
+								Layout.preferredWidth: 36
+								Layout.alignment: Qt.AlignTop
+								fillMode: Image.PreserveAspectFit
+								visible: source.toString() !== ""
+								source: card.modelData.image || card.modelData.appIcon || ""
 							}
 
-							Text {
+							ColumnLayout {
 								Layout.fillWidth: true
-								visible: text !== ""
-								text: card.modelData.body
-								color: Config.colors.text
-								font.family: Config.bar.fontFamily
-								font.pixelSize: Config.bar.fontSize - 1
-								wrapMode: Text.WordWrap
+								spacing: 2
+
+								Text {
+									Layout.fillWidth: true
+									text: card.modelData.summary
+									color: Config.colors.sky
+									font.family: Config.bar.fontFamily
+									font.pixelSize: Config.bar.fontSize
+									font.bold: true
+									elide: Text.ElideRight
+								}
+
+								Text {
+									Layout.fillWidth: true
+									visible: text !== ""
+									text: card.modelData.body
+									color: Config.colors.text
+									font.family: Config.bar.fontFamily
+									font.pixelSize: Config.bar.fontSize - 1
+									wrapMode: Text.WordWrap
+								}
 							}
 						}
-					}
 
-					MouseArea {
-						anchors.fill: parent
-						onClicked: card.modelData.dismiss()
+						MouseArea {
+							anchors.fill: parent
+							onClicked: card.modelData.dismiss()
+						}
 					}
 				}
 			}
@@ -125,126 +129,130 @@ Scope {
 	}
 
 	//notification center
-	PanelWindow {
-		visible: root.centerOpen
-		anchors { top: true; right: true }
-		margins { top: 12; right: 12 }
+	Variants {
+		model: Quickshell.screens
 
-		implicitWidth: 380
-		implicitHeight: centerCol.implicitHeight + 24 
-		color: "transparent"
+		PanelWindow {
+			visible: root.centerOpen
+			anchors { top: true; right: true }
+			margins { top: 12; right: 12 }
 
-		exclusionMode: ExclusionMode.Normal
-		
-		Rectangle {
+			implicitWidth: 380
+			implicitHeight: centerCol.implicitHeight + 24 
+			color: "transparent"
 
-			anchors.fill: parent
-			radius: 10
-			color: Config.colors.base
-			border.width: 2
-			border.color: Config.colors.mauve
+			exclusionMode: ExclusionMode.Normal
 
-			ColumnLayout {
-				id: centerCol
+			Rectangle {
+
 				anchors.fill: parent
-				anchors.margins: 12
-				spacing: 10
+				radius: 10
+				color: Config.colors.base
+				border.width: 2
+				border.color: Config.colors.mauve
 
-				RowLayout{
-					Layout.fillWidth: true
+				ColumnLayout {
+					id: centerCol
+					anchors.fill: parent
+					anchors.margins: 12
+					spacing: 10
 
-					Text {
+					RowLayout{
 						Layout.fillWidth: true
-						text: "Notifications"
-						color: Config.colors.sky
-						font.family: Config.bar.fontFamily
-						font.pixelSize: Config.bar.fontSize + 1
-						font.bold: true
-					}
 
-					Text {
-						text: "Clear all"
-						visible: history.count > 0
-						color: Config.colors.red
-						font.family: Config.bar.fontFamily
-						font.pixelSize: Config.bar.fontSize
-						font.bold: true
-						MouseArea {
-							anchors.fill: parent
-							onClicked: history.clear()
+						Text {
+							Layout.fillWidth: true
+							text: "Notifications"
+							color: Config.colors.sky
+							font.family: Config.bar.fontFamily
+							font.pixelSize: Config.bar.fontSize + 1
+							font.bold: true
+						}
+
+						Text {
+							text: "Clear all"
+							visible: history.count > 0
+							color: Config.colors.red
+							font.family: Config.bar.fontFamily
+							font.pixelSize: Config.bar.fontSize
+							font.bold: true
+							MouseArea {
+								anchors.fill: parent
+								onClicked: history.clear()
+							}
 						}
 					}
-				}
 
-				Repeater {
-					model: history
-					delegate: Rectangle {
-						Layout.fillWidth: true
-						Layout.preferredHeight: histLayout.implicitHeight + 20
-						radius: 8
-						color: Config.colors.mantle 
-						border.width: 1
-						border.color: urgency === NotificationUrgency.Critical ? Config.colors.red : Config.colors.overlay2
+					Repeater {
+						model: history
+						delegate: Rectangle {
+							Layout.fillWidth: true
+							Layout.preferredHeight: histLayout.implicitHeight + 20
+							radius: 8
+							color: Config.colors.mantle 
+							border.width: 1
+							border.color: urgency === NotificationUrgency.Critical ? Config.colors.red : Config.colors.overlay2
 
-						RowLayout {
-							id: histLayout
-							anchors.fill: parent
-							anchors.margins: 10
-							spacing: 10
+							RowLayout {
+								id: histLayout
+								anchors.fill: parent
+								anchors.margins: 10
+								spacing: 10
 
-							ColumnLayout {
-								Layout.fillWidth: true
-								spacing: 2
-
-								RowLayout {
+								ColumnLayout {
 									Layout.fillWidth: true
-									spacing: 6
+									spacing: 2
 
-									Text {
+									RowLayout {
 										Layout.fillWidth: true
-										text: summary
-										color: Config.colors.text
-										font.family: Config.bar.fontFamily
-										font.pixelSize: Config.bar.fontSize
-										font.bold: true
-										elide: Text.ElideRight
+										spacing: 6
+
+										Text {
+											Layout.fillWidth: true
+											text: summary
+											color: Config.colors.text
+											font.family: Config.bar.fontFamily
+											font.pixelSize: Config.bar.fontSize
+											font.bold: true
+											elide: Text.ElideRight
+										}
+
+										Text {
+											text: model.time
+											color: Config.colors.subtext0
+											font.family: Config.bar.fontFamily
+											font.pixelSize: Config.bar.fontSize - 3
+										}
+
+										Text {
+											text: "󰅙"
+											color: Config.colors.subtext0
+											font.family: Config.bar.fontFamily
+											font.pixelSize: Config.bar.fontSize - 1
+											MouseArea {
+												anchors.fill: parent
+												onClicked: history.remove(index)
+											}
+										}
 									}
 
 									Text {
-										text: model.time
+										Layout.fillWidth: true
+										visible: body !== ""
+										text: body
+										color: Config.colors.text
+										font.family: Config.bar.fontFamily
+										font.pixelSize: Config.bar.fontSize - 1
+										wrapMode: Text.WordWrap
+									}
+
+									Text {
+										visible: model.appName !== ""
+										text: model.appName
 										color: Config.colors.subtext0
 										font.family: Config.bar.fontFamily
 										font.pixelSize: Config.bar.fontSize - 3
 									}
-
-									Text {
-										text: "󰅙"
-										color: Config.colors.subtext0
-										font.family: Config.bar.fontFamily
-										font.pixelSize: Config.bar.fontSize - 1
-										MouseArea {
-											anchors.fill: parent
-											onClicked: history.remove(index)
-										}
-									}
-								}
-
-								Text {
-									Layout.fillWidth: true
-									visible: body !== ""
-									text: body
-									color: Config.colors.text
-									font.family: Config.bar.fontFamily
-									font.pixelSize: Config.bar.fontSize - 1
-									wrapMode: Text.WordWrap
-								}
-
-								Text {
-									visible: model.appName !== ""
-									text: model.appName
-									color: Config.colors.subtext0
-									font.family: Config.bar.fontFamily
-									font.pixelSize: Config.bar.fontSize - 3
 								}
 							}
 						}
