@@ -33,7 +33,7 @@ hl.monitor({
 	output = "eDP-1",
 	mode = "preferred",
 	position = "auto",
-	scale = 1.33,
+	scale = 1.25,
 })
 
 for i = 1, 5 do
@@ -51,7 +51,7 @@ end
 -- Set programs that you use
 local terminal    = "kitty"
 local fileManager = "nautilus"
-local menu        = "vicinae toggle"
+local menu        = "qs ipc call launcher toggle"
 local browser     = "firefox"
 
 -------------------
@@ -70,9 +70,10 @@ local browser     = "firefox"
 -- end)
 
 hl.on("hyprland.start", function()
-	hl.exec_cmd("vicinae server")
 	hl.exec_cmd("quickshell")
 	hl.exec_cmd("hyprpaper")
+	hl.exec_cmd("cliphist wipe")
+	hl.exec_cmd("wl-paste --watch cliphist store")
 end)
 
 -------------------------------
@@ -81,33 +82,30 @@ end)
 
 -- See https://wiki.hypr.land/Configuring/Advanced-and-Cool/Environment-variables/
 
-hl.env("XCURSOR_SIZE", "24")
-hl.env("HYPRCURSOR_SIZE", "24")
+hl.env("XCURSOR_SIZE", "20")
+hl.env("HYPRCURSOR_SIZE", "20")
+hl.env("XCURSOR_THEME", "aosp-cursors")
+hl.env("HYPRCURSOR_THEME", "aosp-cursors")
 
--- Force Qt applications to look at qt5ct/qt6ct styling engines
 hl.env("QT_QPA_PLATFORMTHEME", "qt5ct")
 
--- Explicitly tell Qt to use the Wayland platform, falling back to xcb (X11) only if needed
 hl.env("QT_QPA_PLATFORM", "wayland;xcb")
 
--- Force Qt apps to use Kvantum directly as a fallback override theme mechanism
 hl.env("QT_STYLE_OVERRIDE", "kvantum")
 
--- Remove ugly client-side window decorations that some standalone Qt apps try to draw
 hl.env("QT_WAYLAND_DISABLE_WINDOWDECORATION", "1")
 
 hl.on("hyprland.start", function()
-	-- Set prefer-dark scheme for GTK4/Libadwaita
 	hl.exec_cmd("gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'")
-
-	-- Switch default GTK theme to Catppuccin Mocha
 	hl.exec_cmd("gsettings set org.gnome.desktop.interface gtk-theme 'catppuccin-mocha-mauve-standard+default'")
 
-	-- Match system icons to the dark pastel palette
 	hl.exec_cmd("gsettings set org.gnome.desktop.interface icon-theme 'Adwaita'")
+
+	hl.exec_cmd("gsettings set org.gnome.desktop.interface cursor-theme 'aosp-cursors'")
+	hl.exec_cmd("gsettings set org.gnome.desktop.interface cursor-size 20")
 end)
 
-hl.env("HYPRSHOT_DIR", "/home/proteus/Pictures/Screenshots")
+hl.env("HYPRSHOT_DIR", "/home/proteus/pictures/screenshots")
 
 -----------------------
 ----- PERMISSIONS -----
@@ -160,8 +158,8 @@ hl.config({
 		rounding_power   = 0,
 
 		-- Change transparency of focused and unfocused windows
-		active_opacity   = 0.99,
-		inactive_opacity = 0.95,
+		active_opacity   = 1,
+		inactive_opacity = 1,
 
 		shadow           = {
 			enabled      = true,
@@ -181,6 +179,12 @@ hl.config({
 	animations = {
 		enabled = true,
 	},
+})
+
+hl.config({
+	cursor = {
+		no_hardware_cursors = 1
+	}
 })
 
 -- Default curves and animations, see https://wiki.hypr.land/Configuring/Advanced-and-Cool/Animations/
@@ -232,7 +236,7 @@ hl.animation({ leaf = "zoomFactor", enabled = true, speed = 7, bezier = "quick" 
 -- See https://wiki.hypr.land/Configuring/Layouts/Dwindle-Layout/ for more
 hl.config({
 	dwindle = {
-		preserve_split = true,     -- You probably want this
+		preserve_split = true, -- You probably want this
 	},
 })
 
@@ -256,8 +260,8 @@ hl.config({
 
 hl.config({
 	misc = {
-		force_default_wallpaper = -1,        -- Set to 0 or 1 to disable the anime mascot wallpapers
-		disable_hyprland_logo   = false,     -- If true disables the random hyprland logo / anime girl background. :(
+		force_default_wallpaper = -1,  -- Set to 0 or 1 to disable the anime mascot wallpapers
+		disable_hyprland_logo   = false, -- If true disables the random hyprland logo / anime girl background. :(
 	},
 })
 
@@ -276,7 +280,7 @@ hl.config({
 
 		follow_mouse = 1,
 
-		sensitivity  = 0,    -- -1.0 - 1.0, 0 means no modification.
+		sensitivity  = 0, -- -1.0 - 1.0, 0 means no modification.
 
 		touchpad     = {
 			natural_scroll = false,
@@ -313,7 +317,7 @@ hl.bind(mainMod .. " + ESCAPE",
 hl.bind(mainMod .. " + E", hl.dsp.exec_cmd(fileManager))
 hl.bind(mainMod .. " + Z", hl.dsp.window.float({ action = "toggle" }))
 hl.bind(mainMod .. " + SUPER_L", hl.dsp.exec_cmd(menu))
-hl.bind(mainMod .. " + V", hl.dsp.exec_cmd("vicinae vicinae://launch/clipboard/history"))
+hl.bind(mainMod .. " + V", hl.dsp.exec_cmd("qs ipc call clipboard toggle"))
 hl.bind(mainMod .. " + P", hl.dsp.window.pseudo())
 hl.bind(mainMod .. " + N", hl.dsp.exec_cmd("qs ipc call notifications toggle"))
 -- hl.bind(mainMod .. " + J", hl.dsp.layout("togglesplit"))    -- dwindle only
@@ -360,7 +364,7 @@ hl.bind("PRINT", hl.dsp.exec_cmd("hyprshot -m output"))
 -- Switch workspaces with mainMod + [0-9]
 -- Move active window to a workspace with mainMod + SHIFT + [0-9]
 for i = 1, 10 do
-	local key = i % 10   -- 10 maps to key 0
+	local key = i % 10 -- 10 maps to key 0
 	hl.bind(mainMod .. " + " .. key, hl.dsp.focus({ workspace = i }))
 	hl.bind(mainMod .. " + SHIFT + " .. key, hl.dsp.window.move({ workspace = i }))
 end
@@ -431,7 +435,7 @@ hl.window_rule({
 
 hl.window_rule({
 	match = { workspace = "w[tv1]s[true]" },
-	opacity = "0.92 override 0.92 override"
+	opacity = "0.98 override 0.98 override"
 })
 
 -- Layer rules also return a handle.
