@@ -18,6 +18,42 @@ Scope {
 	property string activeWindow: "Window"
 	property var lastCpuIdle: 0
 	property var lastCpuTotal: 0
+	property int batteryLevel: 100
+	property string batteryStatus: "Unknown"
+	property string wifiSSID: ""
+	property int wifiSignal: 0
+	property string networkType: "offline"
+	property string playerStatus: ""
+	property string playerArtist: ""
+	property string playerTitle: ""
+
+	function batteryIcon() {
+		if (batteryStatus === "Charging") return "\uf0e7"
+		if (batteryLevel >= 90) return "\uf240"
+		if (batteryLevel >= 60) return "\uf241"
+		if (batteryLevel >= 40) return "\uf242"
+		if (batteryLevel >= 10) return "\uf243"
+		return "\uf244"
+	}
+
+	function playerIcon() {
+		return playerStatus === "Playing" ? "\uf04c" : "\uf04b"
+	}
+
+	function wifiIcon() {
+		if (networkType === "ethernet") return "\udb80\ude00"
+		if (networkType !== "wifi" || wifiSSID === "" || wifiSSID === "Offline") return "\udb82\udd2d"
+		if (wifiSignal >= 80) return "\udb82\udd28"
+		if (wifiSignal >= 55) return "\udb82\udd25"
+		if (wifiSignal >= 30) return "\udb82\udd22"
+		return "\udb82\udd1f"
+	}
+
+	function playerLabel() {
+		if (playerStatus === "") return "No media"
+		if (playerArtist && playerTitle) return playerArtist + " - " + playerTitle
+		return playerTitle || playerArtist || "No media"
+	}
 
 	//cpu usage
 	Process {
@@ -99,6 +135,88 @@ Scope {
 		Component.onCompleted: running = true
 	}
 
+	//battery level + charging status
+	Process {
+		id: battProc
+		command: ["sh", "-c", "cap=$(cat /sys/class/power_supply/BAT*/capacity 2>/dev/null | head -1); st=$(cat /sys/class/power_supply/BAT*/status 2>/dev/null | head -1); echo \"$cap $st\""]
+		stdout: SplitParser {
+			onRead: data => {
+				if (!data) return
+				var parts = data.trim().split(/\s+/)
+				batteryLevel = parseInt(parts[0]) || 0
+				batteryStatus = parts[1] || "Unknown"
+			}
+		}
+		Component.onCompleted: running = true
+	}
+
+	//network: ethernet (priority) or wifi ssid + signal strength
+	Process {
+		id: wifiProc
+		command: ["sh", "-c", "eth=$(nmcli -t -f DEVICE,TYPE,STATE device status | awk -F: '$2==\"ethernet\" && $3==\"connected\"{print $1; exit}'); if [ -n \"$eth\" ]; then econn=$(nmcli -t -f GENERAL.CONNECTION device show \"$eth\" 2>/dev/null | cut -d: -f2); echo \"ethernet|$econn|0\"; else dev=$(nmcli -t -f DEVICE,TYPE device status | awk -F: '$2==\"wifi\"{print $1; exit}'); conn=$(nmcli -t -f GENERAL.CONNECTION device show \"$dev\" 2>/dev/null | cut -d: -f2); ssid=$(nmcli -t -f 802-11-wireless.ssid connection show \"$conn\" 2>/dev/null | cut -d: -f2); q=$(awk -v ifc=\"$dev:\" '$1==ifc{gsub(\"\\\\.\",\"\",$3); print $3}' /proc/net/wireless); echo \"wifi|$ssid|$q\"; fi"]
+		stdout: SplitParser {
+			onRead: data => {
+				if (!data) return
+				var parts = data.split("|")
+				networkType = parts[0] || "offline"
+				var label = parts[1] ? parts[1].trim() : ""
+				if (networkType === "ethernet") {
+					wifiSSID = label ? label : "Wired"
+					wifiSignal = 100
+				} else if (networkType === "wifi") {
+					wifiSSID = label ? label : "Offline"
+					var quality = parseInt(parts[2]) || 0
+					wifiSignal = Math.min(100, Math.round(quality / 70 * 100))
+				} else {
+					wifiSSID = "Offline"
+					wifiSignal = 0
+				}
+			}
+		}
+		Component.onCompleted: running = true
+	}
+
+	//playerctl metadata
+	Process {
+		id: playerProc
+		command: ["sh", "-c", "st=$(playerctl status 2>/dev/null); ar=$(playerctl metadata artist 2>/dev/null); ti=$(playerctl metadata title 2>/dev/null); echo \"$st|$ar|$ti\""]
+		stdout: SplitParser {
+			onRead: data => {
+				if (!data) return
+				var parts = data.split("|")
+				playerStatus = parts[0] || ""
+				playerArtist = parts[1] || ""
+				playerTitle = parts[2] || ""
+			}
+		}
+		Component.onCompleted: running = true
+	}
+
+	Process {
+		id: playPauseProc
+		command: ["playerctl", "play-pause"]
+		onExited: playerProc.running = true
+	}
+
+	Process {
+		id: nextTrackProc
+		command: ["playerctl", "next"]
+		onExited: playerProc.running = true
+	}
+
+	Process {
+		id: prevTrackProc
+		command: ["playerctl", "previous"]
+		onExited: playerProc.running = true
+	}
+
+	Timer {
+		interval: 1000
+		running: true
+		repeat: true
+		onTriggered: playerProc.running = true
+	}
+
 	//window title
 	Process {
 		id: windowProc
@@ -123,6 +241,8 @@ Scope {
 			memProc.running = true
 			diskProc.running = true
 			volProc.running = true
+			battProc.running = true
+			wifiProc.running = true
 		}
 	}
 
@@ -229,11 +349,14 @@ Scope {
 						font.pixelSize: Config.bar.fontSize
 						font.family: Config.bar.fontFamily
 						font.bold: true
-						Layout.fillWidth: true
+						Layout.maximumWidth: 320
 						Layout.leftMargin: 8
 						elide: Text.ElideRight
 						maximumLineCount: 1
 					}
+
+					// Expanding spacer to push right-side modules
+					Item { Layout.fillWidth: true }
 
 					Text {
 						text: "  " + cpuUsage + "%"
@@ -241,15 +364,14 @@ Scope {
 						font.pixelSize: Config.bar.fontSize
 						font.family: Config.bar.fontFamily
 						font.bold: true
-						Layout.rightMargin: 8
 					}
 
 					Rectangle {
 						Layout.preferredWidth: 1
 						Layout.preferredHeight: 16
 						Layout.alignment: Qt.AlignVCenter
-						Layout.leftMargin: 2
-						Layout.rightMargin: 10
+						Layout.leftMargin: 8
+						Layout.rightMargin: 8
 						color: Config.colors.overlay0
 					}
 
@@ -259,15 +381,14 @@ Scope {
 						font.pixelSize: Config.bar.fontSize
 						font.family: Config.bar.fontFamily
 						font.bold: true
-						Layout.rightMargin: 8
 					}
 
 					Rectangle {
 						Layout.preferredWidth: 1
 						Layout.preferredHeight: 16
 						Layout.alignment: Qt.AlignVCenter
-						Layout.leftMargin: 0
-						Layout.rightMargin: 10
+						Layout.leftMargin: 8
+						Layout.rightMargin: 8
 						color: Config.colors.overlay0
 					}
 
@@ -277,14 +398,13 @@ Scope {
 						font.pixelSize: Config.bar.fontSize
 						font.family: Config.bar.fontFamily
 						font.bold: true
-						Layout.rightMargin: 8
 					}
 
 					Rectangle {
 						Layout.preferredWidth: 1
 						Layout.preferredHeight: 16
 						Layout.alignment: Qt.AlignVCenter
-						Layout.leftMargin: 0
+						Layout.leftMargin: 8
 						Layout.rightMargin: 8
 						color: Config.colors.overlay0
 					}
@@ -295,14 +415,49 @@ Scope {
 						font.pixelSize: Config.bar.fontSize
 						font.family: Config.bar.fontFamily
 						font.bold: true
-						Layout.rightMargin: 8
 					}
 
 					Rectangle {
 						Layout.preferredWidth: 1
 						Layout.preferredHeight: 16
 						Layout.alignment: Qt.AlignVCenter
-						Layout.leftMargin: 0
+						Layout.leftMargin: 8
+						Layout.rightMargin: 8
+						color: Config.colors.overlay0
+					}
+
+					Text {
+						text: root.batteryIcon() + "  " + batteryLevel + "%"
+						color: Config.colors.green
+						font.pixelSize: Config.bar.fontSize
+						font.family: Config.bar.fontFamily
+						font.bold: true
+					}
+
+					Rectangle {
+						Layout.preferredWidth: 1
+						Layout.preferredHeight: 16
+						Layout.alignment: Qt.AlignVCenter
+						Layout.leftMargin: 8
+						Layout.rightMargin: 8
+						color: Config.colors.overlay0
+					}
+
+					Text {
+						text: root.wifiIcon() + "  " + wifiSSID
+						color: Config.colors.teal
+						font.pixelSize: Config.bar.fontSize
+						font.family: Config.bar.fontFamily
+						font.bold: true
+						elide: Text.ElideRight
+						Layout.maximumWidth: 160
+					}
+
+					Rectangle {
+						Layout.preferredWidth: 1
+						Layout.preferredHeight: 16
+						Layout.alignment: Qt.AlignVCenter
+						Layout.leftMargin: 8
 						Layout.rightMargin: 8
 						color: Config.colors.overlay0
 					}
@@ -314,7 +469,7 @@ Scope {
 						font.pixelSize: Config.bar.fontSize
 						font.family: Config.bar.fontFamily
 						font.bold: true
-						Layout.rightMargin: 8
+						Layout.rightMargin: 4
 
 						Timer {
 							interval: 1000
@@ -325,6 +480,55 @@ Scope {
 					}
 
 					Item { width: 4 }
+				}
+
+				RowLayout {
+					id: playerRow
+					anchors.centerIn: parent
+					spacing: 6
+
+					Text {
+						text: root.playerIcon()
+						color: Config.colors.sky
+						font.pixelSize: Config.bar.fontSize
+						font.family: Config.bar.fontFamily
+						font.bold: true
+						Layout.rightMargin: 3
+					}
+
+					Text {
+						text: root.playerLabel()
+						color: Config.colors.sky
+						font.pixelSize: Config.bar.fontSize
+						font.family: Config.bar.fontFamily
+						font.bold: true
+						elide: Text.ElideRight
+						Layout.maximumWidth: 260
+					}
+				}
+
+				Rectangle {
+					width: playerRow.width
+					height: 2
+					color: Config.colors.sky
+					anchors.horizontalCenter: playerRow.horizontalCenter
+					anchors.top: playerRow.bottom
+					anchors.topMargin: 4
+				}
+
+				MouseArea {
+					anchors.fill: playerRow
+					anchors.margins: -6
+					acceptedButtons: Qt.LeftButton
+					onClicked: playPauseProc.running = true
+					onWheel: (wheel) => {
+						if (wheel.angleDelta.y > 0) {
+							nextTrackProc.running = true
+						} else {
+							prevTrackProc.running = true
+						}
+						wheel.accepted = true
+					}
 				}
 			}
 		}

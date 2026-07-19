@@ -1,5 +1,6 @@
 import Quickshell
 import Quickshell.Wayland
+import Quickshell.Hyprland
 import Quickshell.Services.Notifications
 import Quickshell.Io
 import QtQuick
@@ -39,11 +40,19 @@ Scope {
 		function hide() : void { root.centerOpen = false }
 	}
 
-	//notification 
+	// notification toasts
 	Variants {
 		model: Quickshell.screens
 
 		PanelWindow {
+			required property var modelData
+			screen: modelData
+
+			readonly property var monitor: Hyprland.monitorFor(modelData)
+			readonly property bool isFocusedMonitor: monitor?.name === Hyprland.focusedMonitor?.name
+
+			visible: isFocusedMonitor
+
 			anchors { top: true; right: true }
 			margins { top: 12; right: 12 }
 
@@ -128,12 +137,19 @@ Scope {
 		}
 	}
 
-	//notification center
+	// notification center
 	Variants {
 		model: Quickshell.screens
 
 		PanelWindow {
-			visible: root.centerOpen
+			required property var modelData
+			screen: modelData
+
+			readonly property var monitor: Hyprland.monitorFor(modelData)
+			readonly property bool isFocusedMonitor: monitor?.name === Hyprland.focusedMonitor?.name
+
+			visible: root.centerOpen && isFocusedMonitor
+			
 			anchors { top: true; right: true }
 			margins { top: 12; right: 12 }
 
@@ -144,7 +160,6 @@ Scope {
 			exclusionMode: ExclusionMode.Normal
 
 			Rectangle {
-
 				anchors.fill: parent
 				radius: 10
 				color: Config.colors.base

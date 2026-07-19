@@ -6,4 +6,6 @@ ShellRoot {
 
 	Bar {}
 	Notifications {}
+	Launcher {}
+	ClipboardHistory {}
 }
