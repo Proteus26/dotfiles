@@ -18,7 +18,8 @@ Scope {
 	property string query: ""
 
 	property var thumbCache: ({})
-	property var pendingThumbs: []
+	property var pendingQueue: []
+	property bool thumbWorkerRunning: false
 
 	readonly property string thumbDir: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/quickshell-clip-thumbs"
 
@@ -188,26 +189,6 @@ Scope {
 			root.thumbCache = updated
 			
 			root.processNextThumbnail()
-		}
-	}
-
-	Repeater {
-		model: root.pendingThumbs
-
-		Process {
-			required property var modelData
-			
-			command: ["sh", "-c", "printf '%s\\n' \"$1\" | cliphist decode > \"$2\"", "--", modelData.rawLine, modelData.path]
-			
-			Component.onCompleted: running = true
-
-			onExited: (code, status) => {
-				console.log("[clipboard] thumbnail decode for id=" + modelData.id + " exited " + code)
-				const updated = Object.assign({}, root.thumbCache)
-				updated[modelData.id] = (code === 0) ? modelData.path : "error"
-				root.thumbCache = updated
-				root.pendingThumbs = root.pendingThumbs.filter(p => p.id !== modelData.id)
-			}
 		}
 	}
 
@@ -424,7 +405,7 @@ Scope {
 
 										Text {
 											Layout.fillWidth: true
-											text: modelData.isImage ? (modelData.mime + " image") : modelData.preview
+											text: modelData.isImage ? "Image" : modelData.preview
 											color: Config.colors.text
 											font.family: Config.bar.fontFamily
 											font.pixelSize: Config.bar.fontSize

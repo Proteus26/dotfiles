@@ -73,6 +73,7 @@ hl.on("hyprland.start", function()
 	hl.exec_cmd("quickshell")
 	hl.exec_cmd("hyprpaper")
 	hl.exec_cmd("cliphist wipe")
+	hl.exec_cmd("rm -rf /run/user/1000/quickshell-clip-thumbs/*")
 	hl.exec_cmd("wl-paste --watch cliphist store")
 end)
 
