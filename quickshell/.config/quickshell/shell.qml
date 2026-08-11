@@ -8,4 +8,5 @@ ShellRoot {
 	Notifications {}
 	Launcher {}
 	ClipboardHistory {}
+	PowerMenu {}
 }

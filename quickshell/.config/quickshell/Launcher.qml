@@ -164,8 +164,8 @@ Scope {
 			readonly property bool isFocusedMonitor: monitor?.name === Hyprland.focusedMonitor?.name
 
 			visible: root.launcherOpen && isFocusedMonitor
-			implicitWidth: 450
-			implicitHeight: 500
+			implicitWidth: 500
+			implicitHeight: 560
 			color: "transparent"
 			exclusionMode: ExclusionMode.Ignore
 
@@ -181,66 +181,72 @@ Scope {
 
 			Rectangle {
 				anchors.fill: parent
-				radius: 10
+				radius: Config.radius.large
 				color: Config.colors.base
-				border.width: 2
-				border.color: Config.colors.mauve
+				border.width: 1
+				border.color: Config.colors.border
 
 				ColumnLayout {
 					anchors.fill: parent
-					anchors.margins: 16
-					spacing: 12
+					anchors.margins: Config.panel.padding
+					spacing: 10
 
 					RowLayout {
 						Layout.fillWidth: true
+						spacing: 8
+
+						// Accent marker, mirrors the bar's active-workspace dot
+						Rectangle {
+							Layout.preferredWidth: 8
+							Layout.preferredHeight: 8
+							radius: 4
+							color: Config.colors.accent
+						}
 
 						Text {
 							Layout.fillWidth: true
-							text: "Applications"
-							color: Config.colors.sky
+							text: "applications"
+							color: Config.colors.text
 							font.family: Config.bar.fontFamily
-							font.pixelSize: Config.bar.fontSize + 1
+							font.pixelSize: Config.bar.fontSize
 							font.bold: true
 						}
 
 						Text {
 							visible: root.searchResults.length > 0 && !searchInput.text.startsWith("=")
-							text: root.searchResults.length + " result" + (root.searchResults.length === 1 ? "" : "s")
-							color: Config.colors.subtext0
+							text: root.searchResults.length
+							color: Config.colors.textMuted
 							font.family: Config.bar.fontFamily
-							font.pixelSize: Config.bar.fontSize - 3
+							font.pixelSize: Config.bar.fontSize - 1
 						}
 					}
 
-					Rectangle {
+					// Minimal search field - just a bottom rule, no filled box
+					ColumnLayout {
 						Layout.fillWidth: true
-						Layout.preferredHeight: 45
-						radius: 8
-						color: Config.colors.mantle
-						border.width: 1
-						border.color: searchInput.activeFocus ? Config.colors.sky : Config.colors.overlay2
+						spacing: 6
 
 						RowLayout {
-							anchors.fill: parent
-							anchors.margins: 12
+							Layout.fillWidth: true
 							spacing: 8
 
 							Text {
-								text: searchInput.text.startsWith("=") ? "󰃬" : "󰍉"
-								color: searchInput.text.startsWith("=") ? Config.colors.sky : Config.colors.subtext0
+								text: searchInput.text.startsWith("=") ? "=" : "?"
+								color: searchInput.text.startsWith("=") ? Config.colors.accent : Config.colors.textDim
 								font.family: Config.bar.fontFamily
-								font.pixelSize: Config.bar.fontSize + 2
+								font.pixelSize: Config.bar.fontSize + 1
+								font.bold: true
 							}
 
 							Item {
 								Layout.fillWidth: true
-								Layout.fillHeight: true
+								Layout.preferredHeight: 30
 
 								Text {
 									anchors.verticalCenter: parent.verticalCenter
 									visible: searchInput.text.length === 0
-									text: "Type to search, or start with = to calculate…"
-									color: Config.colors.subtext0
+									text: "search, or = to calculate"
+									color: Config.colors.textDim
 									font.family: Config.bar.fontFamily
 									font.pixelSize: Config.bar.fontSize
 									elide: Text.ElideRight
@@ -253,12 +259,10 @@ Scope {
 									verticalAlignment: TextInput.AlignVCenter
 									color: Config.colors.text
 									font.family: Config.bar.fontFamily
-									font.pixelSize: Config.bar.fontSize + 2
+									font.pixelSize: Config.bar.fontSize
 									clip: true
 
 									onTextChanged: root.updateModel(text)
-
-									// Links to the bulletproof master function
 									onAccepted: root.activateCurrent()
 
 									Keys.onEscapePressed: root.launcherOpen = false
@@ -278,6 +282,14 @@ Scope {
 								}
 							}
 						}
+
+						Rectangle {
+							Layout.fillWidth: true
+							Layout.preferredHeight: 2
+							radius: 1
+							color: searchInput.activeFocus ? Config.colors.accent : Config.colors.border
+							Behavior on color { ColorAnimation { duration: 140 } }
+						}
 					}
 
 					ListView {
@@ -288,36 +300,50 @@ Scope {
 						model: root.searchResults
 						currentIndex: root.currentIndex
 						clip: true
-						spacing: 4
+						spacing: 2
 						boundsBehavior: Flickable.StopAtBounds
 						highlightMoveDuration: 100
 
 						onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
 
-						delegate: Rectangle {
+						delegate: Item {
 							id: delegateRoot
 							width: ListView.view.width
-							height: 50
-							radius: 8
+							height: Config.panel.listItemHeight
 
 							required property var modelData
 							required property int index
 
 							property bool isCurrent: ListView.isCurrentItem
-							color: isCurrent
-								? Config.colors.surface0
-								: (mouseArea.containsMouse ? Config.colors.surface0 : "transparent")
-							border.width: isCurrent ? 1 : 0
-							border.color: Config.colors.sky
+
+							Rectangle {
+								anchors.fill: parent
+								radius: Config.radius.small
+								color: delegateRoot.isCurrent
+									? Config.colors.surfaceAlt
+									: (mouseArea.containsMouse ? Config.colors.surface : "transparent")
+								Behavior on color { ColorAnimation { duration: 100 } }
+							}
+
+							// Left accent bar - the only "selected" indicator, minimal by design
+							Rectangle {
+								visible: delegateRoot.isCurrent
+								width: 2
+								height: parent.height - 12
+								anchors.verticalCenter: parent.verticalCenter
+								anchors.left: parent.left
+								color: Config.colors.accent
+							}
 
 							RowLayout {
 								anchors.fill: parent
-								anchors.margins: 10
-								spacing: 16
+								anchors.leftMargin: 14
+								anchors.rightMargin: 10
+								spacing: 12
 
 								Image {
-									Layout.preferredWidth: 32
-									Layout.preferredHeight: 32
+									Layout.preferredWidth: 28
+									Layout.preferredHeight: 28
 									visible: !modelData.isCalc && source.toString() !== ""
 									source: modelData.isCalc ? "" : (Quickshell.iconPath(modelData.appIcon, true) || "")
 									fillMode: Image.PreserveAspectFit
@@ -325,28 +351,27 @@ Scope {
 
 								Text {
 									visible: modelData.isCalc
-									Layout.preferredWidth: 32
+									Layout.preferredWidth: 28
 									text: "="
 									horizontalAlignment: Text.AlignHCenter
-									color: Config.colors.sky
+									color: Config.colors.accent
 									font.bold: true
-									font.pixelSize: Config.bar.fontSize + 4
+									font.pixelSize: Config.bar.fontSize + 2
 								}
 
 								Text {
 									Layout.fillWidth: true
 									text: modelData.appName
-									color: modelData.isCalc ? Config.colors.sky : Config.colors.text
+									color: delegateRoot.isCurrent ? Config.colors.text : Config.colors.textMuted
 									font.family: Config.bar.fontFamily
 									font.pixelSize: Config.bar.fontSize
-									font.bold: true
 									elide: Text.ElideRight
 								}
 
 								Text {
 									visible: modelData.isCalc && modelData.calcResult !== ""
 									text: "copy"
-									color: Config.colors.subtext0
+									color: Config.colors.textDim
 									font.family: Config.bar.fontFamily
 									font.pixelSize: Config.bar.fontSize - 3
 								}
@@ -371,13 +396,53 @@ Scope {
 						Layout.fillHeight: true
 						visible: root.searchResults.length === 0
 
-						Text {
+						ColumnLayout {
 							anchors.centerIn: parent
-							text: searchInput.text.startsWith("=") ? "Enter a valid expression" : "No matching applications"
-							color: Config.colors.subtext0
+							spacing: 8
+
+							Text {
+								Layout.alignment: Qt.AlignHCenter
+								text: searchInput.text.startsWith("=") ? "\u2248" : "\uf002"
+								color: Config.colors.textDim
+								font.family: Config.bar.iconFontFamily
+								font.pixelSize: Config.bar.fontSize + 14
+							}
+
+							Text {
+								Layout.alignment: Qt.AlignHCenter
+								text: searchInput.text.startsWith("=") ? "enter a valid expression" : "no matching applications"
+								color: Config.colors.textDim
+								font.family: Config.bar.fontFamily
+								font.pixelSize: Config.bar.fontSize - 1
+								horizontalAlignment: Text.AlignHCenter
+							}
+						}
+					}
+
+					Rectangle {
+						Layout.fillWidth: true
+						Layout.preferredHeight: 1
+						color: Config.colors.border
+					}
+
+					RowLayout {
+						Layout.fillWidth: true
+						spacing: 14
+
+						Text {
+							Layout.fillWidth: true
+							text: "\u2191\u2193 navigate  \u23ce open  \u238b close"
+							color: Config.colors.textDim
 							font.family: Config.bar.fontFamily
-							font.pixelSize: Config.bar.fontSize - 1
-							horizontalAlignment: Text.AlignHCenter
+							font.pixelSize: Config.bar.fontSize - 2
+							elide: Text.ElideRight
+						}
+
+						Text {
+							text: "= to calculate"
+							color: Config.colors.textDim
+							font.family: Config.bar.fontFamily
+							font.pixelSize: Config.bar.fontSize - 2
 						}
 					}
 				}

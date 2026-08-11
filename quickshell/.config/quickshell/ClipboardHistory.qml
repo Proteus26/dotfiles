@@ -224,8 +224,8 @@ Scope {
 			readonly property bool isFocusedMonitor: monitor?.name === Hyprland.focusedMonitor?.name
 
 			visible: root.clipOpen && isFocusedMonitor
-			implicitWidth: 480
-			implicitHeight: 560
+			implicitWidth: 520
+			implicitHeight: 620
 			color: "transparent"
 			exclusionMode: ExclusionMode.Ignore
 
@@ -242,66 +242,53 @@ Scope {
 
 			Rectangle {
 				anchors.fill: parent
-				radius: 10
+				radius: Config.radius.large
 				color: Config.colors.base
-				border.width: 2
-				border.color: Config.colors.mauve
+				border.width: 1
+				border.color: Config.colors.border
 
 				ColumnLayout {
 					anchors.fill: parent
-					anchors.margins: 16
-					spacing: 12
+					anchors.margins: Config.panel.padding
+					spacing: 10
 
 					RowLayout {
 						Layout.fillWidth: true
 
 						Text {
 							Layout.fillWidth: true
-							text: "Clipboard History"
-							color: Config.colors.sky
+							text: "clipboard"
+							color: Config.colors.textMuted
 							font.family: Config.bar.fontFamily
-							font.pixelSize: Config.bar.fontSize + 1
-							font.bold: true
+							font.pixelSize: Config.bar.fontSize
 						}
 
 						Text {
 							visible: root.searchResults.length > 0
-							text: root.searchResults.length + " item" + (root.searchResults.length === 1 ? "" : "s")
-							color: Config.colors.subtext0
+							text: root.searchResults.length
+							color: Config.colors.textDim
 							font.family: Config.bar.fontFamily
-							font.pixelSize: Config.bar.fontSize - 3
+							font.pixelSize: Config.bar.fontSize - 2
 						}
 					}
 
-					Rectangle {
+					ColumnLayout {
 						Layout.fillWidth: true
-						Layout.preferredHeight: 45
-						radius: 8
-						color: Config.colors.mantle
-						border.width: 1
-						border.color: searchInput.activeFocus ? Config.colors.sky : Config.colors.overlay2
+						spacing: 6
 
 						RowLayout {
-							anchors.fill: parent
-							anchors.margins: 12
+							Layout.fillWidth: true
 							spacing: 8
-
-							Text {
-								text: ""
-								color: Config.colors.subtext0
-								font.family: Config.bar.fontFamily
-								font.pixelSize: Config.bar.fontSize + 2
-							}
 
 							Item {
 								Layout.fillWidth: true
-								Layout.fillHeight: true
+								Layout.preferredHeight: 30
 
 								Text {
 									anchors.verticalCenter: parent.verticalCenter
 									visible: searchInput.text.length === 0
-									text: "Search clipboard history..."
-									color: Config.colors.subtext0
+									text: "search clipboard history"
+									color: Config.colors.textDim
 									font.family: Config.bar.fontFamily
 									font.pixelSize: Config.bar.fontSize
 									elide: Text.ElideRight
@@ -314,7 +301,7 @@ Scope {
 									verticalAlignment: TextInput.AlignVCenter
 									color: Config.colors.text
 									font.family: Config.bar.fontFamily
-									font.pixelSize: Config.bar.fontSize + 2
+									font.pixelSize: Config.bar.fontSize
 									clip: true
 
 									onTextChanged: root.applyFilter(text)
@@ -341,6 +328,12 @@ Scope {
 								}
 							}
 						}
+
+						Rectangle {
+							Layout.fillWidth: true
+							Layout.preferredHeight: 1
+							color: searchInput.activeFocus ? Config.colors.accent : Config.colors.border
+						}
 					}
 
 					ListView {
@@ -351,62 +344,72 @@ Scope {
 						model: root.searchResults
 						currentIndex: root.currentIndex
 						clip: true
-						spacing: 4
+						spacing: 2
 						boundsBehavior: Flickable.StopAtBounds
 						highlightMoveDuration: 100
 
 						onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
 
-						delegate: Rectangle {
+						delegate: Item {
 							id: delegateRoot
 							width: ListView.view.width
-							height: modelData.isImage ? 160 : 56 
-							radius: 8
+							height: modelData.isImage ? Config.panel.thumbHeight : Config.panel.listItemHeight
 
 							required property var modelData
 							required property int index
 
 							property bool isCurrent: ListView.isCurrentItem
-							color: isCurrent
-								? Config.colors.surface0
-								: (mouseArea.containsMouse ? Config.colors.surface0 : "transparent")
-							border.width: isCurrent ? 1 : 0
-							border.color: Config.colors.sky
 
 							Component.onCompleted: {
 								if (modelData.isImage) root.ensureThumbnail(modelData.id, modelData.rawLine)
 							}
 
+							Rectangle {
+								anchors.fill: parent
+								radius: Config.radius.small
+								color: delegateRoot.isCurrent
+									? Config.colors.surfaceAlt
+									: (mouseArea.containsMouse ? Config.colors.surface : "transparent")
+								Behavior on color { ColorAnimation { duration: 100 } }
+							}
+
+							Rectangle {
+								visible: delegateRoot.isCurrent
+								width: 2
+								height: parent.height - 12
+								anchors.verticalCenter: parent.verticalCenter
+								anchors.left: parent.left
+								color: Config.colors.accent
+							}
+
 							ColumnLayout {
 								anchors.fill: parent
-								anchors.margins: 10
-								spacing: 8
+								anchors.leftMargin: 14
+								anchors.rightMargin: 10
+								anchors.topMargin: 6
+								anchors.bottomMargin: 6
+								spacing: 6
 
 								RowLayout {
 									Layout.fillWidth: true
-									Layout.preferredHeight: 36
-									spacing: 12
+									Layout.preferredHeight: 30
+									spacing: 10
 
-									Item {
-										Layout.preferredWidth: 36
-										Layout.preferredHeight: 36
-
-										Text {
-											anchors.centerIn: parent
-											text: "󰅍"
-											color: Config.colors.subtext0
-											font.pixelSize: Config.bar.fontSize + 4
-										}
+									Text {
+										text: "\u25a4"
+										color: Config.colors.textDim
+										font.family: Config.bar.iconFontFamily
+										font.pixelSize: Config.bar.fontSize
 									}
 
 									ColumnLayout {
 										Layout.fillWidth: true
-										spacing: 2
+										spacing: 1
 
 										Text {
 											Layout.fillWidth: true
 											text: modelData.isImage ? "Image" : modelData.preview
-											color: Config.colors.text
+											color: delegateRoot.isCurrent ? Config.colors.text : Config.colors.textMuted
 											font.family: Config.bar.fontFamily
 											font.pixelSize: Config.bar.fontSize
 											elide: Text.ElideRight
@@ -416,28 +419,22 @@ Scope {
 										Text {
 											visible: modelData.isImage && modelData.size !== ""
 											text: modelData.size
-											color: Config.colors.subtext0
+											color: Config.colors.textDim
 											font.family: Config.bar.fontFamily
 											font.pixelSize: Config.bar.fontSize - 3
 										}
 									}
 
-									Rectangle {
-										Layout.preferredWidth: 28
-										Layout.preferredHeight: 28
-										radius: 6
-										color: delBtn.containsMouse ? Config.colors.red : "transparent"
-
-										Text {
-											anchors.centerIn: parent
-											text: "󰆴"
-											color: delBtn.containsMouse ? Config.colors.base : Config.colors.subtext0
-											font.pixelSize: Config.bar.fontSize
-										}
+									Text {
+										text: "\u2715"
+										color: delBtn.containsMouse ? Config.colors.bad : Config.colors.textDim
+										font.pixelSize: Config.bar.fontSize - 1
+										Behavior on color { ColorAnimation { duration: 120 } }
 
 										MouseArea {
 											id: delBtn
 											anchors.fill: parent
+											anchors.margins: -6
 											hoverEnabled: true
 											onClicked: root.deleteEntry(modelData)
 										}
@@ -449,30 +446,37 @@ Scope {
 									Layout.fillWidth: true
 									Layout.fillHeight: true
 
-									Image {
-										id: thumbImg
-										visible: modelData.isImage && root.thumbCache[modelData.id] && root.thumbCache[modelData.id] !== "pending" && root.thumbCache[modelData.id] !== "error"
+									Rectangle {
 										anchors.fill: parent
-										fillMode: Image.PreserveAspectFit
-										source: visible ? ("file://" + root.thumbCache[modelData.id]) : ""
-										cache: false
-									}
+										radius: Config.radius.small
+										color: Config.colors.base
+										visible: modelData.isImage
 
-									Text {
-										visible: modelData.isImage && (root.thumbCache[modelData.id] === "pending" || root.thumbCache[modelData.id] === undefined)
-										anchors.centerIn: parent
-										text: "󰔟"
-										color: Config.colors.subtext0
-										font.pixelSize: Config.bar.fontSize + 4
-									}
+										Image {
+											visible: modelData.isImage && root.thumbCache[modelData.id] && root.thumbCache[modelData.id] !== "pending" && root.thumbCache[modelData.id] !== "error"
+											anchors.fill: parent
+											anchors.margins: 4
+											fillMode: Image.PreserveAspectFit
+											source: visible ? ("file://" + root.thumbCache[modelData.id]) : ""
+											cache: false
+										}
 
-									Text {
-										visible: modelData.isImage && root.thumbCache[modelData.id] === "error"
-										anchors.centerIn: parent
-										text: "󰅖"
-										color: Config.colors.red
-										font.bold: true
-										font.pixelSize: Config.bar.fontSize + 4
+										Text {
+											visible: modelData.isImage && (root.thumbCache[modelData.id] === "pending" || root.thumbCache[modelData.id] === undefined)
+											anchors.centerIn: parent
+											text: "..."
+											color: Config.colors.textDim
+											font.pixelSize: Config.bar.fontSize + 4
+										}
+
+										Text {
+											visible: modelData.isImage && root.thumbCache[modelData.id] === "error"
+											anchors.centerIn: parent
+											text: "\u2715"
+											color: Config.colors.bad
+											font.bold: true
+											font.pixelSize: Config.bar.fontSize + 4
+										}
 									}
 								}
 							}
@@ -481,7 +485,7 @@ Scope {
 								id: mouseArea
 								anchors.fill: parent
 								hoverEnabled: true
-								z: -1 
+								z: -1
 								onEntered: root.currentIndex = delegateRoot.index
 
 								onClicked: {
@@ -500,9 +504,9 @@ Scope {
 						Text {
 							anchors.centerIn: parent
 							text: root.allEntries.length === 0
-								? "No clipboard history yet"
-								: "No matching entries"
-							color: Config.colors.subtext0
+								? "no clipboard history yet"
+								: "no matching entries"
+							color: Config.colors.textDim
 							font.family: Config.bar.fontFamily
 							font.pixelSize: Config.bar.fontSize - 1
 							horizontalAlignment: Text.AlignHCenter

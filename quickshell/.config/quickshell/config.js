@@ -1,38 +1,55 @@
 const colors = {
-  rosewater: "#f5e0dc",
-  flamingo: "#f2cdcd",
-  pink: "#f5c2e7",
-  mauve: "#cba6f7",
-  red: "#f38ba8",
-  maroon: "#eba0ac",
-  peach: "#fab387",
-  yellow: "#f9e2af",
-  green: "#a6e3a1",
-  teal: "#94e2d5",
-  sky: "#89dceb",
-  sapphire: "#74c7ec",
-  blue: "#89b4fa",
-  lavender: "#b4befe",
-  text: "#cdd6f4",
-  subtext1: "#bac2de",
-  subtext0: "#a6adc8",
-  overlay2: "#9399b2",
-  overlay1: "#7f849c",
-  overlay0: "#6c7086",
-  surface2: "#585b70",
-  surface1: "#45475a",
-  surface0: "#313244",
-  base: "#1e1e2e",
-  mantle: "#181825",
-  crust: "#11111b",
+	bg: "#11111b",          // crust (darkest)
+	base: "#1e1e2e",        // base (bar/panel surface)
+	surface: "#313244",     // surface0
+	surfaceAlt: "#45475a",  // surface1
+	overlay: "#585b70",     // surface2
+
+	border: "#45475a",      // surface1
+	borderMuted: "#313244", // surface0
+
+	text: "#cdd6f4",        // text
+	textMuted: "#a6adc8",   // subtext0
+	textDim: "#6c7086",     // overlay0
+
+	accent: "#89b4fa",      // blue
+	onAccent: "#1e1e2e",    // base
+	accentDim: "#45475a",   // surface1 (subtle emphasis border)
+
+	accent2: "#cba6f7",     // mauve
+
+	good: "#a6e3a1",        // green
+	warn: "#f9e2af",        // yellow
+	bad: "#f38ba8",         // red
+
+	hover: "#45475a",       // surface1
+	hoverBorder: "#585b70", // surface2
+}
+
+const radius = {
+	small: 8,
+	medium: 12,
+	large: 18,
+	full: 999,
 }
 
 const bar = {
-	fontFamily: "Roboto Mono Nerd Font",
-	fontSize: 14,
-	height: 30
+	fontFamily: "Rubik",
+	iconFontFamily: "Roboto Mono Nerd Font",
+	fontSize: 15,
+	height: 40,
+	gap: 8,
+	margin: 10,
+	segmentSpacing: 12,
 }
 
 const notifications = {
 	timeout: 5000,
+}
+
+const panel = {
+	padding: 16,
+	gap: 12,
+	listItemHeight: 52,
+	thumbHeight: 180,
 }

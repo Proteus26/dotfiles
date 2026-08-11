@@ -2,7 +2,11 @@ import Quickshell
 import Quickshell.Wayland
 import Quickshell.Io
 import Quickshell.Hyprland
+import Quickshell.Services.Pipewire
+import Quickshell.Services.UPower
+import Quickshell.Services.Mpris
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Layouts
 
 import "config.js" as Config
@@ -10,101 +14,77 @@ import "config.js" as Config
 Scope {
 	id: root
 
-	//sysinfo properties
+	// CPU / memory: read straight from /proc via FileView instead of forking a shell.
 	property int cpuUsage: 0
 	property int memUsage: 0
-	property int diskUsage: 0
-	property int volumeLevel: 0
-	property string activeWindow: "Window"
 	property var lastCpuIdle: 0
 	property var lastCpuTotal: 0
-	property int batteryLevel: 100
-	property string batteryStatus: "Unknown"
-	property string wifiSSID: ""
-	property int wifiSignal: 0
-	property string networkType: "offline"
-	property string playerStatus: ""
-	property string playerArtist: ""
-	property string playerTitle: ""
 
-	function batteryIcon() {
-		if (batteryStatus === "Charging") return "\uf0e7"
-		if (batteryLevel >= 90) return "\uf240"
-		if (batteryLevel >= 60) return "\uf241"
-		if (batteryLevel >= 40) return "\uf242"
-		if (batteryLevel >= 10) return "\uf243"
-		return "\uf244"
+	FileView {
+		id: statFile
+		path: "/proc/stat"
 	}
 
-	function playerIcon() {
-		return playerStatus === "Playing" ? "\uf04c" : "\uf04b"
+	FileView {
+		id: memFile
+		path: "/proc/meminfo"
 	}
 
-	function wifiIcon() {
-		if (networkType === "ethernet") return "\udb80\ude00"
-		if (networkType !== "wifi" || wifiSSID === "" || wifiSSID === "Offline") return "\udb82\udd2d"
-		if (wifiSignal >= 80) return "\udb82\udd28"
-		if (wifiSignal >= 55) return "\udb82\udd25"
-		if (wifiSignal >= 30) return "\udb82\udd22"
-		return "\udb82\udd1f"
-	}
+	readonly property string statText: statFile.text()
+	onStatTextChanged: root.parseCpuStat(statText)
 
-	function playerLabel() {
-		if (playerStatus === "") return "No media"
-		if (playerArtist && playerTitle) return playerArtist + " - " + playerTitle
-		return playerTitle || playerArtist || "No media"
-	}
+	readonly property string memText: memFile.text()
+	onMemTextChanged: root.parseMemInfo(memText)
 
-	//cpu usage
-	Process {
-		id: cpuProc
-		command: ["sh", "-c", "head -1 /proc/stat"]
-		stdout: SplitParser {
-			onRead: data => {
-				if (!data) return
-				var parts = data.trim().split(/\s+/)
-				var user = parseInt(parts[1]) || 0
-				var nice = parseInt(parts[2]) || 0
-				var system = parseInt(parts[3]) || 0
-				var idle = parseInt(parts[4]) || 0
-				var iowait = parseInt(parts[5]) || 0
-				var irq = parseInt(parts[6]) || 0
-				var softirq = parseInt(parts[7]) || 0
+	function parseCpuStat(text) {
+		if (!text) return
+		const line = text.split("\n")[0]
+		const parts = line.trim().split(/\s+/)
+		const user = parseInt(parts[1]) || 0
+		const nice = parseInt(parts[2]) || 0
+		const system = parseInt(parts[3]) || 0
+		const idle = parseInt(parts[4]) || 0
+		const iowait = parseInt(parts[5]) || 0
+		const irq = parseInt(parts[6]) || 0
+		const softirq = parseInt(parts[7]) || 0
 
-				var total = user + nice + system + idle + iowait + irq + softirq
-				var idleTime = idle + iowait
+		const total = user + nice + system + idle + iowait + irq + softirq
+		const idleTime = idle + iowait
 
-				if (lastCpuTotal > 0) {
-					var totalDiff = total - lastCpuTotal
-					var idleDiff = idleTime - lastCpuIdle
-					if (totalDiff > 0) {
-						cpuUsage = Math.round(100 * (totalDiff - idleDiff) / totalDiff)
-					}
-				}
-				lastCpuTotal = total
-				lastCpuIdle = idleTime
+		if (lastCpuTotal > 0) {
+			const totalDiff = total - lastCpuTotal
+			const idleDiff = idleTime - lastCpuIdle
+			if (totalDiff > 0) {
+				cpuUsage = Math.round(100 * (totalDiff - idleDiff) / totalDiff)
 			}
 		}
-		Component.onCompleted: running = true
+		lastCpuTotal = total
+		lastCpuIdle = idleTime
 	}
 
-	//mem usage
-	Process {
-		id: memProc
-		command: ["sh", "-c", "free | grep Mem"]
-		stdout: SplitParser {
-			onRead: data => {
-				if (!data) return
-				var parts = data.trim().split(/\s+/)
-				var total = parseInt(parts[1]) || 1
-				var used = parseInt(parts[2]) || 0
-				memUsage = Math.round(100 * used / total)
-			}
+	function parseMemInfo(text) {
+		if (!text) return
+		const totalMatch = text.match(/MemTotal:\s*(\d+)/)
+		const availMatch = text.match(/MemAvailable:\s*(\d+)/)
+		if (!totalMatch || !availMatch) return
+		const total = parseInt(totalMatch[1]) || 1
+		const avail = parseInt(availMatch[1]) || 0
+		memUsage = Math.round(100 * (total - avail) / total)
+	}
+
+	Timer {
+		interval: 2000
+		running: true
+		repeat: true
+		onTriggered: {
+			statFile.reload()
+			memFile.reload()
 		}
-		Component.onCompleted: running = true
 	}
 
-	//disk usage
+	// Disk: no native Quickshell API, so use a Process polled infrequently.
+	property int diskUsage: 0
+
 	Process {
 		id: diskProc
 		command: ["sh", "-c", "df / | tail -1"]
@@ -119,41 +99,125 @@ Scope {
 		Component.onCompleted: running = true
 	}
 
-	//volume level
-	Process {
-		id: volProc
-		command: ["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"]
-		stdout: SplitParser {
-			onRead: data => {
-				if (!data) return
-				var match = data.match(/Volume:\s*([\d.]+)/)
-				if (match) {
-					volumeLevel = Math.round(parseFloat(match[1]) * 100)
-				}
-			}
-		}
-		Component.onCompleted: running = true
+	Timer {
+		interval: 30000
+		running: true
+		repeat: true
+		onTriggered: diskProc.running = true
 	}
 
-	//battery level + charging status
-	Process {
-		id: battProc
-		command: ["sh", "-c", "cap=$(cat /sys/class/power_supply/BAT*/capacity 2>/dev/null | head -1); st=$(cat /sys/class/power_supply/BAT*/status 2>/dev/null | head -1); echo \"$cap $st\""]
-		stdout: SplitParser {
-			onRead: data => {
-				if (!data) return
-				var parts = data.trim().split(/\s+/)
-				batteryLevel = parseInt(parts[0]) || 0
-				batteryStatus = parts[1] || "Unknown"
-			}
-		}
-		Component.onCompleted: running = true
+	// Volume: native Pipewire binding, no polling.
+	readonly property var audioSink: Pipewire.defaultAudioSink
+	readonly property int volumeLevel: (audioSink && audioSink.ready && audioSink.audio)
+		? Math.round(audioSink.audio.volume * 100) : 0
+	readonly property bool volumeMuted: (audioSink && audioSink.audio) ? audioSink.audio.muted : false
+
+	PwObjectTracker {
+		objects: root.audioSink ? [root.audioSink] : []
 	}
 
-	//network: ethernet (priority) or wifi ssid + signal strength
+	// Battery: native UPower binding, event driven, no polling.
+	readonly property var battery: UPower.displayDevice
+	readonly property bool batteryPresent: battery ? battery.isPresent : false
+	readonly property int batteryLevel: battery ? Math.round(battery.percentage * 100) : 0
+	readonly property int batteryState: battery ? battery.state : UPowerDeviceState.Unknown
+	readonly property double timeToEmpty: battery ? battery.timeToEmpty : 0
+	readonly property double timeToFull: battery ? battery.timeToFull : 0
+
+	function batteryIcon() {
+		if (batteryState === UPowerDeviceState.Charging) return "\uf0e7"
+		if (batteryState === UPowerDeviceState.FullyCharged) return "\uf240"
+		if (batteryLevel >= 90) return "\uf240"
+		if (batteryLevel >= 60) return "\uf241"
+		if (batteryLevel >= 40) return "\uf242"
+		if (batteryLevel >= 10) return "\uf243"
+		return "\uf244"
+	}
+
+	function batteryColor() {
+		if (batteryLevel <= 15) return Config.colors.bad
+		if (batteryLevel <= 30) return Config.colors.warn
+		return Config.colors.textMuted
+	}
+
+	function formatTime(sec) {
+		sec = Math.max(0, Math.round(sec))
+		const h = Math.floor(sec / 3600)
+		const m = Math.floor((sec % 3600) / 60)
+		return (h > 0 ? h + "h " : "") + m + "m"
+	}
+
+	function batteryTooltip() {
+		if (!root.batteryPresent) return "No battery"
+		var text = root.batteryLevel + "%"
+		if (root.batteryState === UPowerDeviceState.Charging) {
+			text += " · charging"
+			if (root.timeToFull > 0) text += " · " + root.formatTime(root.timeToFull) + " to full"
+		} else if (root.batteryState === UPowerDeviceState.Discharging) {
+			if (root.timeToEmpty > 0) text += " · " + root.formatTime(root.timeToEmpty) + " remaining"
+		} else if (root.batteryState === UPowerDeviceState.FullyCharged) {
+			text += " · fully charged"
+		}
+		return text
+	}
+
+	// Media: native MPRIS binding, replaces playerctl entirely.
+	readonly property var mprisPlayers: Mpris.players
+	readonly property var activePlayer: (mprisPlayers && mprisPlayers.values.length > 0)
+		? (mprisPlayers.values.find(p => p.isPlaying) || mprisPlayers.values[0])
+		: null
+
+	function playerIcon() {
+		return (activePlayer && activePlayer.isPlaying) ? "\uf04c" : "\uf04b"
+	}
+
+	function playerLabel() {
+		if (!activePlayer) return "No media"
+		const artist = activePlayer.trackArtist || ""
+		const title = activePlayer.trackTitle || ""
+		if (artist && title) return artist + " - " + title
+		return title || artist || "No media"
+	}
+
+	function togglePlayback() {
+		if (activePlayer && activePlayer.canTogglePlaying) activePlayer.isPlaying = !activePlayer.isPlaying
+	}
+	function nextTrack() {
+		if (activePlayer && activePlayer.canGoNext) activePlayer.next()
+	}
+	function prevTrack() {
+		if (activePlayer && activePlayer.canGoPrevious) activePlayer.previous()
+	}
+
+	// Window title: reactive foreign-toplevel protocol, no polling.
+	readonly property string activeWindowTitle: ToplevelManager.activeToplevel
+		? (ToplevelManager.activeToplevel.title || "")
+		: ""
+
+	// Network: Quickshell's NetworkManager API isn't stable yet, so use a Process.
+	property string wifiSSID: ""
+	property int wifiSignal: 0
+	property string networkType: "offline"
+
+	function wifiIcon() {
+		if (networkType === "ethernet") return "\uef09"
+		if (networkType !== "wifi" || wifiSSID === "" || wifiSSID === "Offline") return "\uf05aa"
+		if (wifiSignal >= 75) return "\udb82\udd28"
+		if (wifiSignal >= 50) return "\udb82\udd25"
+		if (wifiSignal >= 25) return "\udb82\udd22"
+		return "\udb82\udd1f"
+	}
+
+	function wifiTooltip() {
+		if (networkType === "ethernet") return "Ethernet · " + wifiSSID
+		if (networkType === "wifi" && wifiSSID && wifiSSID !== "Offline")
+			return wifiSSID + " · " + wifiSignal + "% signal"
+		return "No network"
+	}
+
 	Process {
 		id: wifiProc
-		command: ["sh", "-c", "eth=$(nmcli -t -f DEVICE,TYPE,STATE device status | awk -F: '$2==\"ethernet\" && $3==\"connected\"{print $1; exit}'); if [ -n \"$eth\" ]; then econn=$(nmcli -t -f GENERAL.CONNECTION device show \"$eth\" 2>/dev/null | cut -d: -f2); echo \"ethernet|$econn|0\"; else dev=$(nmcli -t -f DEVICE,TYPE device status | awk -F: '$2==\"wifi\"{print $1; exit}'); conn=$(nmcli -t -f GENERAL.CONNECTION device show \"$dev\" 2>/dev/null | cut -d: -f2); ssid=$(nmcli -t -f 802-11-wireless.ssid connection show \"$conn\" 2>/dev/null | cut -d: -f2); q=$(awk -v ifc=\"$dev:\" '$1==ifc{gsub(\"\\\\.\",\"\",$3); print $3}' /proc/net/wireless); echo \"wifi|$ssid|$q\"; fi"]
+		command: ["sh", "-c", "eth=$(nmcli -t -f DEVICE,TYPE,STATE device status | awk -F: '$2==\"ethernet\" && $3==\"connected\"{print $1; exit}'); if [ -n \"$eth\" ]; then econn=$(nmcli -t -f GENERAL.CONNECTION device show \"$eth\" 2>/dev/null | cut -d: -f2); echo \"ethernet|$econn|0\"; else dev=$(nmcli -t -f DEVICE,TYPE device status | awk -F: '$2==\"wifi\"{print $1; exit}'); conn=$(nmcli -t -f GENERAL.CONNECTION device show \"$dev\" 2>/dev/null | cut -d: -f2); ssid=$(nmcli -t -f 802-11-wireless.ssid connection show \"$conn\" 2>/dev/null | cut -d: -f2); q=$(awk -v ifc=\"$dev:\" '$1==ifc{gsub(\"\\\\.\",\"\",$4); print $4}' /proc/net/wireless); echo \"wifi|$ssid|$q\"; fi"]
 		stdout: SplitParser {
 			onRead: data => {
 				if (!data) return
@@ -165,8 +229,8 @@ Scope {
 					wifiSignal = 100
 				} else if (networkType === "wifi") {
 					wifiSSID = label ? label : "Offline"
-					var quality = parseInt(parts[2]) || 0
-					wifiSignal = Math.min(100, Math.round(quality / 70 * 100))
+					var dbm = parseInt(parts[2]) || 0
+					wifiSignal = Math.max(0, Math.min(100, Math.round(2 * (dbm + 100))))
 				} else {
 					wifiSSID = "Offline"
 					wifiSignal = 0
@@ -176,95 +240,36 @@ Scope {
 		Component.onCompleted: running = true
 	}
 
-	//playerctl metadata
-	Process {
-		id: playerProc
-		command: ["sh", "-c", "st=$(playerctl status 2>/dev/null); ar=$(playerctl metadata artist 2>/dev/null); ti=$(playerctl metadata title 2>/dev/null); echo \"$st|$ar|$ti\""]
-		stdout: SplitParser {
-			onRead: data => {
-				if (!data) return
-				var parts = data.split("|")
-				playerStatus = parts[0] || ""
-				playerArtist = parts[1] || ""
-				playerTitle = parts[2] || ""
-			}
-		}
-		Component.onCompleted: running = true
-	}
-
-	Process {
-		id: playPauseProc
-		command: ["playerctl", "play-pause"]
-		onExited: playerProc.running = true
-	}
-
-	Process {
-		id: nextTrackProc
-		command: ["playerctl", "next"]
-		onExited: playerProc.running = true
-	}
-
-	Process {
-		id: prevTrackProc
-		command: ["playerctl", "previous"]
-		onExited: playerProc.running = true
-	}
-
 	Timer {
-		interval: 1000
+		interval: 5000
 		running: true
 		repeat: true
-		onTriggered: playerProc.running = true
+		onTriggered: wifiProc.running = true
 	}
 
-	//window title
-	Process {
-		id: windowProc
-		command: ["sh", "-c", "hyprctl activewindow -j | jq -r '.title // empty'"]
-		stdout: SplitParser {
-			onRead: data => {
-				if (data && data.trim()) {
-					activeWindow = data.trim()
-				}
-			}
-		}
-		Component.onCompleted: running = true
+	// Right-hand stat readouts, joined into one compact segment
+	property var statsModel: [
+		{ label: "C", value: cpuUsage + "%" },
+		{ label: "M", value: memUsage + "%" },
+		{ label: "D", value: diskUsage + "%" },
+		{ label: "V", value: volumeMuted ? "mute" : (volumeLevel + "%") }
+	]
+
+	function statsTooltip() {
+		return "CPU " + cpuUsage + "%  ·  RAM " + memUsage + "%  ·  Disk " + diskUsage + "%  ·  Vol " +
+			(volumeMuted ? "muted" : volumeLevel + "%")
 	}
 
-	//system stat timers
-	Timer {
-		interval: 2000
-		running: true
-		repeat: true
-		onTriggered: {
-			cpuProc.running = true
-			memProc.running = true
-			diskProc.running = true
-			volProc.running = true
-			battProc.running = true
-			wifiProc.running = true
-		}
+	function statusTooltip() {
+		var parts = []
+		if (batteryPresent) parts.push(root.batteryTooltip())
+		if (networkType === "wifi" && wifiSSID && wifiSSID !== "Offline") parts.push(wifiSSID + " · " + wifiSignal + "%")
+		else if (networkType === "ethernet") parts.push("Ethernet · " + wifiSSID)
+		else parts.push("No network")
+		return parts.join("  ·  ")
 	}
 
-	//event based update for window
-	Connections {
-		target: Hyprland
-		function onRawEvent(event) {
-			windowProc.running = true
-		}
-	}
-
-	//backup for window
-	Timer {
-		interval: 200
-		running: true
-		repeat: true
-		onTriggered: {
-			windowProc.running = true
-		}
-	}
-
-	//layout from here onwards
+	// Layout: minimal, segmented, near-black.
 	Variants {
 		model: Quickshell.screens
 
@@ -278,256 +283,260 @@ Scope {
 				right: true
 			}
 
-			implicitHeight: 30
-			color: Config.colors.base
+			implicitHeight: Config.bar.height + Config.bar.margin
+			color: "transparent"
 
-			margins {
-				top: 0
-				bottom: 0
-				left: 0
-				right: 0
-			}
-
-			Rectangle {
+			Item {
 				anchors.fill: parent
-				color: Config.colors.base
 
 				RowLayout {
 					anchors.fill: parent
-					spacing: 0
+					anchors.topMargin: Config.bar.margin / 2
+					anchors.bottomMargin: Config.bar.margin / 2
+					anchors.leftMargin: Config.bar.margin
+					anchors.rightMargin: Config.bar.margin
+					spacing: Config.bar.gap
 
-					Item { width: 4 }
+					// Workspaces
+					BarSegment {
+						Layout.preferredWidth: wsRow.implicitWidth + 16
 
-					Repeater {
-						model: 10 
+						RowLayout {
+							id: wsRow
+							anchors.centerIn: parent
+							spacing: 10
 
-						Rectangle {
-							Layout.preferredWidth: 20
-							Layout.preferredHeight: parent.height
-							color: "transparent"
+							Repeater {
+								model: 10
 
-							property var workspace: Hyprland.workspaces.values.find(ws => ws.id === index + 1) ?? null
-							property bool isActive: Hyprland.focusedWorkspace?.id === (index + 1)
-							property bool hasWindows: workspace !== null
+								Item {
+									Layout.preferredWidth: 22
+									Layout.preferredHeight: Config.bar.height
 
-							Text {
-								text: index === 9 ? "0" : index + 1
-								color: parent.isActive ? Config.colors.sapphire : (parent.hasWindows ? Config.colors.sapphire : Config.colors.subtext0)
-								font.pixelSize: Config.bar.fontSize
-								font.family: Config.bar.fontFamily
-								font.bold: true
-								anchors.centerIn: parent
-							}
+									property var workspace: Hyprland.workspaces.values.find(ws => ws.id === index + 1) ?? null
+									property bool isActive: Hyprland.focusedWorkspace?.id === (index + 1)
+									property bool hasWindows: workspace !== null
 
-							Rectangle {
-								width: 20
-								height: 2
-								color: parent.isActive ? Config.colors.mauve : ""
-								anchors.horizontalCenter: parent.horizontalCenter
-								anchors.bottom: parent.bottom
-							}
+									Text {
+										anchors.centerIn: parent
+										text: index === 9 ? "0" : index + 1
+										color: parent.isActive
+											? Config.colors.accent
+											: (parent.hasWindows ? Config.colors.textMuted : Config.colors.textDim)
+										font.pixelSize: Config.bar.fontSize
+										font.family: Config.bar.fontFamily
+										font.bold: parent.isActive
+									}
 
-							MouseArea {
-								anchors.fill: parent
-								onClicked: Hyprland.dispatch("workspace " + (index + 1))
+									Rectangle {
+										visible: parent.isActive
+										width: 6
+										height: 6
+										radius: 3
+										color: Config.colors.accent
+										anchors.horizontalCenter: parent.horizontalCenter
+										anchors.bottom: parent.bottom
+									}
+
+									MouseArea {
+										anchors.fill: parent
+										hoverEnabled: true
+										onClicked: Hyprland.dispatch("workspace " + (index + 1))
+									}
+								}
 							}
 						}
 					}
 
-					Rectangle {
-						Layout.preferredWidth: 1
-						Layout.preferredHeight: 16
-						Layout.alignment: Qt.AlignVCenter
-						Layout.leftMargin: 4
-						Layout.rightMargin: 4
-						color: Config.colors.overlay0
-					}
+					// Window title - takes remaining space
+					BarSegment {
+						Layout.fillWidth: true
 
-					Text {
-						text: activeWindow
-						color: Config.colors.mauve
-						font.pixelSize: Config.bar.fontSize
-						font.family: Config.bar.fontFamily
-						font.bold: true
-						Layout.maximumWidth: 320
-						Layout.leftMargin: 8
-						elide: Text.ElideRight
-						maximumLineCount: 1
-					}
-
-					// Expanding spacer to push right-side modules
-					Item { Layout.fillWidth: true }
-
-					Text {
-						text: "  " + cpuUsage + "%"
-						color: Config.colors.yellow
-						font.pixelSize: Config.bar.fontSize
-						font.family: Config.bar.fontFamily
-						font.bold: true
-					}
-
-					Rectangle {
-						Layout.preferredWidth: 1
-						Layout.preferredHeight: 16
-						Layout.alignment: Qt.AlignVCenter
-						Layout.leftMargin: 8
-						Layout.rightMargin: 8
-						color: Config.colors.overlay0
-					}
-
-					Text {
-						text: "  " + memUsage + "%"
-						color: Config.colors.peach
-						font.pixelSize: Config.bar.fontSize
-						font.family: Config.bar.fontFamily
-						font.bold: true
-					}
-
-					Rectangle {
-						Layout.preferredWidth: 1
-						Layout.preferredHeight: 16
-						Layout.alignment: Qt.AlignVCenter
-						Layout.leftMargin: 8
-						Layout.rightMargin: 8
-						color: Config.colors.overlay0
-					}
-
-					Text {
-						text: "  " + diskUsage + "%"
-						color: Config.colors.blue
-						font.pixelSize: Config.bar.fontSize
-						font.family: Config.bar.fontFamily
-						font.bold: true
-					}
-
-					Rectangle {
-						Layout.preferredWidth: 1
-						Layout.preferredHeight: 16
-						Layout.alignment: Qt.AlignVCenter
-						Layout.leftMargin: 8
-						Layout.rightMargin: 8
-						color: Config.colors.overlay0
-					}
-
-					Text {
-						text: "  " + volumeLevel + "%"
-						color: Config.colors.mauve
-						font.pixelSize: Config.bar.fontSize
-						font.family: Config.bar.fontFamily
-						font.bold: true
-					}
-
-					Rectangle {
-						Layout.preferredWidth: 1
-						Layout.preferredHeight: 16
-						Layout.alignment: Qt.AlignVCenter
-						Layout.leftMargin: 8
-						Layout.rightMargin: 8
-						color: Config.colors.overlay0
-					}
-
-					Text {
-						text: root.batteryIcon() + "  " + batteryLevel + "%"
-						color: Config.colors.green
-						font.pixelSize: Config.bar.fontSize
-						font.family: Config.bar.fontFamily
-						font.bold: true
-					}
-
-					Rectangle {
-						Layout.preferredWidth: 1
-						Layout.preferredHeight: 16
-						Layout.alignment: Qt.AlignVCenter
-						Layout.leftMargin: 8
-						Layout.rightMargin: 8
-						color: Config.colors.overlay0
-					}
-
-					Text {
-						text: root.wifiIcon() + "  " + wifiSSID
-						color: Config.colors.teal
-						font.pixelSize: Config.bar.fontSize
-						font.family: Config.bar.fontFamily
-						font.bold: true
-						elide: Text.ElideRight
-						Layout.maximumWidth: 160
-					}
-
-					Rectangle {
-						Layout.preferredWidth: 1
-						Layout.preferredHeight: 16
-						Layout.alignment: Qt.AlignVCenter
-						Layout.leftMargin: 8
-						Layout.rightMargin: 8
-						color: Config.colors.overlay0
-					}
-
-					Text {
-						id: clockText
-						text: Qt.formatDateTime(new Date(), "ddd, MMM dd - HH:mm")
-						color: Config.colors.sapphire
-						font.pixelSize: Config.bar.fontSize
-						font.family: Config.bar.fontFamily
-						font.bold: true
-						Layout.rightMargin: 4
-
-						Timer {
-							interval: 1000
-							running: true
-							repeat: true
-							onTriggered: clockText.text = Qt.formatDateTime(new Date(), "ddd, MMM dd - HH:mm")
+						Text {
+							anchors.fill: parent
+							anchors.leftMargin: 16
+							anchors.rightMargin: 16
+							verticalAlignment: Text.AlignVCenter
+							text: root.activeWindowTitle || "Desktop"
+							color: Config.colors.textMuted
+							font.pixelSize: Config.bar.fontSize
+							font.family: Config.bar.fontFamily
+							elide: Text.ElideRight
 						}
 					}
 
-					Item { width: 4 }
+					// System stats
+					BarSegment {
+						id: statsSeg
+						Layout.preferredWidth: statsRow.implicitWidth + 16
+
+						RowLayout {
+							id: statsRow
+							anchors.centerIn: parent
+							spacing: 10
+
+							Repeater {
+								model: root.statsModel
+
+								RowLayout {
+									required property var modelData
+									spacing: 3
+
+									Text {
+										text: modelData.label
+										color: Config.colors.textDim
+										font.pixelSize: Config.bar.fontSize - 1
+										font.family: Config.bar.fontFamily
+									}
+									Text {
+										text: modelData.value
+										color: Config.colors.text
+										font.pixelSize: Config.bar.fontSize
+										font.family: Config.bar.fontFamily
+									}
+								}
+							}
+						}
+
+					}
+
+					// Battery + wifi
+					BarSegment {
+						id: statusSeg
+						visible: root.batteryPresent || root.networkType !== "offline"
+						alert: root.batteryPresent && root.batteryLevel <= 15
+						Layout.preferredWidth: statusRow.implicitWidth + 16
+
+						RowLayout {
+							id: statusRow
+							anchors.centerIn: parent
+							spacing: 10
+
+							// Battery
+							RowLayout {
+								id: batteryRow
+								visible: root.batteryPresent
+								spacing: 5
+
+								Text {
+									text: root.batteryIcon()
+									color: root.batteryColor()
+									font.family: Config.bar.iconFontFamily
+									font.pixelSize: Config.bar.fontSize
+								}
+								Text {
+									text: root.batteryLevel + "%"
+									color: root.batteryLevel <= 15 ? Config.colors.bad : Config.colors.text
+									font.family: Config.bar.fontFamily
+									font.pixelSize: Config.bar.fontSize
+								}
+
+								// Thin charge/state underline
+								Rectangle {
+									width: batteryRow.width
+									height: 3
+									radius: 1.5
+									color: root.batteryState === UPowerDeviceState.Charging
+										? Config.colors.good
+										: (root.batteryLevel <= 15 ? Config.colors.bad : Config.colors.border)
+									Layout.alignment: Qt.AlignBottom
+									Layout.bottomMargin: -3
+								}
+							}
+
+							// Wifi
+							RowLayout {
+								id: wifiRow
+								spacing: 5
+
+						Text {
+							text: root.wifiIcon()
+							color: Config.colors.accent2
+							font.family: Config.bar.iconFontFamily
+							font.pixelSize: Config.bar.fontSize
+						}
+								Text {
+									text: root.wifiSSID
+									color: Config.colors.text
+									font.family: Config.bar.fontFamily
+									font.pixelSize: Config.bar.fontSize
+									elide: Text.ElideRight
+									Layout.maximumWidth: 110
+								}
+							}
+						}
+
+					}
+
+					// Clock - the one accent-colored element on the bar
+					BarSegment {
+						id: clockSeg
+						emphasized: true
+						Layout.preferredWidth: clockText.implicitWidth + 16
+
+						Text {
+							id: clockText
+							anchors.centerIn: parent
+							text: Qt.formatDateTime(new Date(), "ddd dd MMM  HH:mm")
+							color: Config.colors.accent
+							font.pixelSize: Config.bar.fontSize
+							font.family: Config.bar.fontFamily
+							font.bold: false
+
+							Timer {
+								interval: 1000
+								running: true
+								repeat: true
+								onTriggered: clockText.text = Qt.formatDateTime(new Date(), "ddd dd MMM  HH:mm")
+							}
+						}
+					}
 				}
 
-				RowLayout {
-					id: playerRow
+				// Floating media pill, centered over the bar, only
+				// shown when something is actually playing/paused.
+				BarSegment {
+					id: mediaPill
+					visible: root.activePlayer !== null
+					emphasized: true
 					anchors.centerIn: parent
-					spacing: 6
+					implicitHeight: Config.bar.height
+					implicitWidth: mediaRow.implicitWidth + 20
 
-					Text {
-						text: root.playerIcon()
-						color: Config.colors.sky
-						font.pixelSize: Config.bar.fontSize
-						font.family: Config.bar.fontFamily
-						font.bold: true
-						Layout.rightMargin: 3
-					}
+					RowLayout {
+						id: mediaRow
+						anchors.centerIn: parent
+						spacing: 8
 
-					Text {
-						text: root.playerLabel()
-						color: Config.colors.sky
-						font.pixelSize: Config.bar.fontSize
-						font.family: Config.bar.fontFamily
-						font.bold: true
-						elide: Text.ElideRight
-						Layout.maximumWidth: 260
-					}
-				}
-
-				Rectangle {
-					width: playerRow.width
-					height: 2
-					color: Config.colors.sky
-					anchors.horizontalCenter: playerRow.horizontalCenter
-					anchors.top: playerRow.bottom
-					anchors.topMargin: 4
-				}
-
-				MouseArea {
-					anchors.fill: playerRow
-					anchors.margins: -6
-					acceptedButtons: Qt.LeftButton
-					onClicked: playPauseProc.running = true
-					onWheel: (wheel) => {
-						if (wheel.angleDelta.y > 0) {
-							nextTrackProc.running = true
-						} else {
-							prevTrackProc.running = true
+						Text {
+							text: root.playerIcon()
+							color: Config.colors.accent2
+							font.pixelSize: Config.bar.fontSize
+							font.family: Config.bar.fontFamily
 						}
-						wheel.accepted = true
+
+						Text {
+							text: root.playerLabel()
+							color: Config.colors.text
+							font.pixelSize: Config.bar.fontSize
+							font.family: Config.bar.fontFamily
+							elide: Text.ElideRight
+							Layout.maximumWidth: 320
+						}
+					}
+
+					MouseArea {
+						anchors.fill: parent
+						acceptedButtons: Qt.LeftButton
+						onClicked: root.togglePlayback()
+						onWheel: (wheel) => {
+							if (wheel.angleDelta.y > 0) {
+								root.nextTrack()
+							} else {
+								root.prevTrack()
+							}
+							wheel.accepted = true
+						}
 					}
 				}
 			}

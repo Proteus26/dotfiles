@@ -26,6 +26,7 @@ Scope {
 				summary: n.summary,
 				body: n.body,
 				appName: n.appName,
+				appIcon: n.appIcon || "",
 				urgency: n.urgency,
 				time: Qt.formatDateTime(new Date(), "HH:mm")
 			})
@@ -56,7 +57,7 @@ Scope {
 			anchors { top: true; right: true }
 			margins { top: 12; right: 12 }
 
-			implicitWidth: 380
+			implicitWidth: 420
 			implicitHeight: Math.max(1, column.implicitHeight)
 			color: "transparent"
 
@@ -65,13 +66,14 @@ Scope {
 			ColumnLayout {
 				id: column
 				width: parent.width
-				spacing: 10
+				spacing: 8
 
 				Repeater {
 					model: server.trackedNotifications
-					delegate: Rectangle {
+					delegate: Item {
 						id: card
 						required property var modelData
+						property bool isCritical: modelData.urgency === NotificationUrgency.Critical
 
 						Timer {
 							running: card.modelData.urgency != NotificationUrgency.Critical
@@ -80,21 +82,38 @@ Scope {
 						}
 
 						Layout.fillWidth: true
-						Layout.preferredHeight: layout.implicitHeight + 20
-						radius: 8
-						color: Config.colors.base
-						border.width: 2
-						border.color: modelData.urgency === NotificationUrgency.Critical ? Config.colors.red : Config.colors.mauve
+						Layout.preferredHeight: layout.implicitHeight + 22
+
+						Rectangle {
+							anchors.fill: parent
+							radius: Config.radius.medium
+							color: Config.colors.base
+							border.width: 1
+							border.color: card.isCritical
+								? Config.colors.bad
+								: (cardHover.containsMouse ? Config.colors.hoverBorder : Config.colors.border)
+							Behavior on border.color { ColorAnimation { duration: 140 } }
+						}
+
+						Rectangle {
+							width: 2
+							height: parent.height - 12
+							anchors.verticalCenter: parent.verticalCenter
+							anchors.left: parent.left
+							anchors.leftMargin: 6
+							color: card.isCritical ? Config.colors.bad : Config.colors.accent
+						}
 
 						RowLayout {
 							id: layout
 							anchors.fill: parent
-							anchors.margins: 10
+							anchors.margins: 12
+							anchors.leftMargin: 18
 							spacing: 10
 
 							Image {
-								Layout.preferredHeight: 36
-								Layout.preferredWidth: 36
+								Layout.preferredHeight: 40
+								Layout.preferredWidth: 40
 								Layout.alignment: Qt.AlignTop
 								fillMode: Image.PreserveAspectFit
 								visible: source.toString() !== ""
@@ -108,7 +127,7 @@ Scope {
 								Text {
 									Layout.fillWidth: true
 									text: card.modelData.summary
-									color: Config.colors.sky
+									color: Config.colors.text
 									font.family: Config.bar.fontFamily
 									font.pixelSize: Config.bar.fontSize
 									font.bold: true
@@ -119,7 +138,7 @@ Scope {
 									Layout.fillWidth: true
 									visible: text !== ""
 									text: card.modelData.body
-									color: Config.colors.text
+									color: Config.colors.textMuted
 									font.family: Config.bar.fontFamily
 									font.pixelSize: Config.bar.fontSize - 1
 									wrapMode: Text.WordWrap
@@ -128,7 +147,9 @@ Scope {
 						}
 
 						MouseArea {
+							id: cardHover
 							anchors.fill: parent
+							hoverEnabled: true
 							onClicked: card.modelData.dismiss()
 						}
 					}
@@ -153,7 +174,7 @@ Scope {
 			anchors { top: true; right: true }
 			margins { top: 12; right: 12 }
 
-			implicitWidth: 380
+			implicitWidth: 500
 			implicitHeight: centerCol.implicitHeight + 24 
 			color: "transparent"
 
@@ -161,38 +182,59 @@ Scope {
 
 			Rectangle {
 				anchors.fill: parent
-				radius: 10
+				radius: Config.radius.large
 				color: Config.colors.base
-				border.width: 2
-				border.color: Config.colors.mauve
+				border.width: 1
+				border.color: Config.colors.border
 
 				ColumnLayout {
 					id: centerCol
 					anchors.fill: parent
-					anchors.margins: 12
+					anchors.margins: Config.panel.padding
 					spacing: 10
 
 					RowLayout{
 						Layout.fillWidth: true
+						spacing: 8
+
+						// Accent marker, mirrors the bar's active-workspace dot
+						Rectangle {
+							Layout.preferredWidth: 8
+							Layout.preferredHeight: 8
+							radius: 4
+							color: Config.colors.accent
+						}
 
 						Text {
 							Layout.fillWidth: true
-							text: "Notifications"
-							color: Config.colors.sky
+							text: "notifications"
+							color: Config.colors.text
 							font.family: Config.bar.fontFamily
-							font.pixelSize: Config.bar.fontSize + 1
+							font.pixelSize: Config.bar.fontSize
 							font.bold: true
 						}
 
 						Text {
-							text: "Clear all"
 							visible: history.count > 0
-							color: Config.colors.red
+							text: history.count
+							color: Config.colors.textMuted
 							font.family: Config.bar.fontFamily
-							font.pixelSize: Config.bar.fontSize
-							font.bold: true
+							font.pixelSize: Config.bar.fontSize - 1
+						}
+
+						Text {
+							text: "clear"
+							visible: history.count > 0
+							color: clearMouse.containsMouse ? Config.colors.bad : Config.colors.textDim
+							font.family: Config.bar.fontFamily
+							font.pixelSize: Config.bar.fontSize - 2
+							Behavior on color { ColorAnimation { duration: 120 } }
+
 							MouseArea {
+								id: clearMouse
 								anchors.fill: parent
+								anchors.margins: -6
+								hoverEnabled: true
 								onClicked: history.clear()
 							}
 						}
@@ -200,22 +242,57 @@ Scope {
 
 					Repeater {
 						model: history
-						delegate: Rectangle {
+						delegate: Item {
+							id: histCard
+							property bool isCritical: urgency === NotificationUrgency.Critical
+
 							Layout.fillWidth: true
-							Layout.preferredHeight: histLayout.implicitHeight + 20
-							radius: 8
-							color: Config.colors.mantle 
-							border.width: 1
-							border.color: urgency === NotificationUrgency.Critical ? Config.colors.red : Config.colors.overlay2
+							Layout.preferredHeight: histLayout.implicitHeight + 22
+
+							Rectangle {
+								anchors.fill: parent
+								radius: Config.radius.small
+								color: histHover.containsMouse
+									? Config.colors.surfaceAlt
+									: Config.colors.surface
+								border.width: 1
+								border.color: histCard.isCritical
+									? Config.colors.bad
+									: (histHover.containsMouse ? Config.colors.hoverBorder : Config.colors.borderMuted)
+								Behavior on color { ColorAnimation { duration: 140 } }
+								Behavior on border.color { ColorAnimation { duration: 140 } }
+							}
+
+							Rectangle {
+								visible: histCard.isCritical
+								width: 3
+								height: parent.height - 14
+								radius: 1.5
+								anchors.verticalCenter: parent.verticalCenter
+								anchors.left: parent.left
+								anchors.leftMargin: 5
+								color: Config.colors.bad
+							}
 
 							RowLayout {
 								id: histLayout
 								anchors.fill: parent
-								anchors.margins: 10
-								spacing: 10
+								anchors.margins: 14
+								anchors.leftMargin: histCard.isCritical ? 18 : 14
+								spacing: 12
+
+								Image {
+									Layout.preferredWidth: 34
+									Layout.preferredHeight: 34
+									Layout.alignment: Qt.AlignTop
+									fillMode: Image.PreserveAspectFit
+									visible: source.toString() !== ""
+									source: model.appIcon !== "" ? (Quickshell.iconPath(model.appIcon, true) || "") : ""
+								}
 
 								ColumnLayout {
 									Layout.fillWidth: true
+									Layout.alignment: Qt.AlignTop
 									spacing: 2
 
 									RowLayout {
@@ -234,18 +311,23 @@ Scope {
 
 										Text {
 											text: model.time
-											color: Config.colors.subtext0
+											color: Config.colors.textDim
 											font.family: Config.bar.fontFamily
 											font.pixelSize: Config.bar.fontSize - 3
 										}
 
 										Text {
-											text: "󰅙"
-											color: Config.colors.subtext0
+											text: "\u2715"
+											color: delMouse.containsMouse ? Config.colors.bad : Config.colors.textDim
 											font.family: Config.bar.fontFamily
-											font.pixelSize: Config.bar.fontSize - 1
+											font.pixelSize: Config.bar.fontSize - 2
+											Behavior on color { ColorAnimation { duration: 120 } }
+
 											MouseArea {
+												id: delMouse
 												anchors.fill: parent
+												anchors.margins: -6
+												hoverEnabled: true
 												onClicked: history.remove(index)
 											}
 										}
@@ -255,20 +337,27 @@ Scope {
 										Layout.fillWidth: true
 										visible: body !== ""
 										text: body
-										color: Config.colors.text
+										color: Config.colors.textMuted
 										font.family: Config.bar.fontFamily
 										font.pixelSize: Config.bar.fontSize - 1
 										wrapMode: Text.WordWrap
 									}
 
 									Text {
-										visible: model.appName !== ""
+										visible: model.appName !== "" && model.appIcon === ""
 										text: model.appName
-										color: Config.colors.subtext0
+										color: Config.colors.textDim
 										font.family: Config.bar.fontFamily
 										font.pixelSize: Config.bar.fontSize - 3
 									}
 								}
+							}
+
+							MouseArea {
+								id: histHover
+								anchors.fill: parent
+								hoverEnabled: true
+								acceptedButtons: Qt.NoButton
 							}
 						}
 					}
