@@ -38,15 +38,15 @@ Rectangle {
 
 	default property alias content: contentItem.data
 
-	Item {
-		id: contentItem
-		anchors.fill: parent
-	}
-
 	MouseArea {
 		id: hoverArea
 		anchors.fill: parent
 		hoverEnabled: root.interactive
 		acceptedButtons: Qt.NoButton
+	}
+
+	Item {
+		id: contentItem
+		anchors.fill: parent
 	}
 }

@@ -43,7 +43,7 @@ Scope {
 
 	Process { id: lockProc;     command: ["loginctl", "lock-session"] }
 	Process { id: suspendProc;  command: ["systemctl", "suspend"] }
-	Process { id: logoutProc;   command: ["hyprctl", "dispatch", "exit"] }
+	Process { id: logoutProc;   command: ["hyprctl", "dispatch", "hl.dsp.exit()"] }
 	Process { id: rebootProc;   command: ["systemctl", "reboot"] }
 	Process { id: poweroffProc; command: ["systemctl", "poweroff"] }
 

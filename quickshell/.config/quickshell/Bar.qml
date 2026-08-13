@@ -5,8 +5,8 @@ import Quickshell.Hyprland
 import Quickshell.Services.Pipewire
 import Quickshell.Services.UPower
 import Quickshell.Services.Mpris
+import Quickshell.Services.SystemTray
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Layouts
 
 import "config.js" as Config
@@ -229,6 +229,8 @@ Scope {
 					wifiSignal = 100
 				} else if (networkType === "wifi") {
 					wifiSSID = label ? label : "Offline"
+					// Signal level in dBm (e.g. -46). Convert to a 0-100
+					// percentage so the bars track real signal strength.
 					var dbm = parseInt(parts[2]) || 0
 					wifiSignal = Math.max(0, Math.min(100, Math.round(2 * (dbm + 100))))
 				} else {
@@ -269,11 +271,11 @@ Scope {
 		return parts.join("  ·  ")
 	}
 
-	// Layout: minimal, segmented, near-black.
 	Variants {
 		model: Quickshell.screens
 
 		PanelWindow {
+			id: barWindow
 			property var modelData
 			screen: modelData
 
@@ -290,16 +292,33 @@ Scope {
 				anchors.fill: parent
 
 				RowLayout {
-					anchors.fill: parent
+					id: barRow
+					anchors.top: parent.top
+					anchors.left: parent.left
+					anchors.right: parent.right
+					height: Config.bar.height
 					anchors.topMargin: Config.bar.margin / 2
-					anchors.bottomMargin: Config.bar.margin / 2
 					anchors.leftMargin: Config.bar.margin
 					anchors.rightMargin: Config.bar.margin
 					spacing: Config.bar.gap
 
 					// Workspaces
 					BarSegment {
+						id: workspaceSeg
 						Layout.preferredWidth: wsRow.implicitWidth + 16
+
+						// Scroll to step through workspaces (wraps 1<->10). The
+						MouseArea {
+							anchors.fill: parent
+							acceptedButtons: Qt.NoButton
+							onWheel: (wheel) => {
+								const current = Hyprland.focusedWorkspace?.id ?? 1
+								const next = wheel.angleDelta.y > 0
+									? (current === 1 ? 10 : current - 1)
+									: (current === 10 ? 1 : current + 1)
+								Hyprland.dispatch("hl.dsp.focus({ workspace = " + next + " })")
+							}
+						}
 
 						RowLayout {
 							id: wsRow
@@ -341,7 +360,7 @@ Scope {
 									MouseArea {
 										anchors.fill: parent
 										hoverEnabled: true
-										onClicked: Hyprland.dispatch("workspace " + (index + 1))
+										onClicked: Hyprland.dispatch("hl.dsp.focus({ workspace = " + (index + 1) + " })")
 									}
 								}
 							}
@@ -398,6 +417,140 @@ Scope {
 							}
 						}
 
+					}
+
+					// System tray - native StatusNotifierItem binding, no polling
+					BarSegment {
+						id: traySeg
+						visible: SystemTray.items.values.length > 0
+						Layout.preferredWidth: trayRow.implicitWidth + 16
+
+						RowLayout {
+							id: trayRow
+							anchors.centerIn: parent
+							spacing: 10
+
+							property string trayMatchQuery: ""
+
+							Process {
+								id: trayInspectProc
+								command: ["hyprctl", "clients", "-j"]
+								stdout: StdioCollector {
+									onStreamFinished: {
+										const sig = trayRow.trayMatchQuery
+										if (!sig) return
+
+										let clients
+										try {
+											clients = JSON.parse(text)
+										} catch (e) {
+											console.warn("tray kill: failed to parse hyprctl clients -j", e)
+											return
+										}
+
+										const strip = (s) => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "")
+
+										const pids = clients
+											.filter(c => {
+												const cls = strip(c.class || c.initialClass)
+												const title = strip(c.title || c.initialTitle)
+												return cls.startsWith(sig) || title.startsWith(sig)
+													|| (cls.length > 0 && sig.startsWith(cls)) || (title.length > 0 && sig.startsWith(title))
+											})
+											.map(c => String(c.pid))
+
+										if (pids.length === 0) {
+											console.warn("tray kill: no Hyprland window matched", sig)
+											return
+										}
+
+										console.warn("tray kill: closing pid(s)", pids.join(","), "for", sig)
+										trayKillProc.command = ["kill", "-TERM"].concat(pids)
+										trayKillProc.running = true
+									}
+								}
+							}
+
+							Process { id: trayKillProc }
+
+							Repeater {
+								model: SystemTray.items
+
+								Item {
+									id: trayItem
+									required property var modelData
+									Layout.preferredWidth: 18
+									Layout.preferredHeight: 18
+
+									readonly property string tooltipText: {
+										const raw = modelData.title || modelData.tooltipTitle || modelData.id || ""
+										const firstLine = raw.split("\n")[0].trim()
+										return firstLine.length > 40 ? firstLine.substring(0, 40) + "\u2026" : firstLine
+									}
+
+									Image {
+										anchors.fill: parent
+										anchors.margins: 1
+										source: modelData.icon
+										fillMode: Image.PreserveAspectFit
+										smooth: true
+										asynchronous: true
+									}
+
+									MouseArea {
+										id: trayHover
+										anchors.fill: parent
+										hoverEnabled: true
+										acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
+
+										onClicked: (mouse) => {
+											if (mouse.button === Qt.RightButton) {
+												const sig = (modelData.title || modelData.id || "").toLowerCase().replace(/[^a-z0-9]/g, "").substring(0, 8)
+												if (sig.length === 0) {
+													console.warn("tray kill: no usable title/id for", modelData.id)
+												} else {
+													console.warn("tray kill: looking up window for", sig)
+													trayRow.trayMatchQuery = sig
+													trayInspectProc.running = true
+												}
+											} else if (mouse.button === Qt.MiddleButton) {
+												modelData.secondaryActivate()
+											} else {
+												modelData.activate()
+											}
+										}
+
+										onWheel: (wheel) => {
+											modelData.scroll(wheel.angleDelta.y, false)
+											wheel.accepted = true
+										}
+									}
+									Rectangle {
+										visible: trayHover.containsMouse && trayItem.tooltipText !== ""
+										anchors.verticalCenter: parent.verticalCenter
+										anchors.right: parent.left
+										anchors.rightMargin: 6
+										z: 100
+										width: tooltipLabel.implicitWidth + 16
+										height: tooltipLabel.implicitHeight + 10
+										radius: Config.radius.small
+										color: Config.colors.surface
+										border.width: 1
+										border.color: Config.colors.border
+
+										Text {
+											id: tooltipLabel
+											anchors.centerIn: parent
+											text: trayItem.tooltipText
+											color: Config.colors.text
+											font.family: Config.bar.fontFamily
+											font.pixelSize: Config.bar.fontSize - 2
+											wrapMode: Text.NoWrap
+										}
+									}
+								}
+							}
+						}
 					}
 
 					// Battery + wifi
@@ -499,7 +652,8 @@ Scope {
 					id: mediaPill
 					visible: root.activePlayer !== null
 					emphasized: true
-					anchors.centerIn: parent
+					anchors.horizontalCenter: parent.horizontalCenter
+					anchors.verticalCenter: barRow.verticalCenter
 					implicitHeight: Config.bar.height
 					implicitWidth: mediaRow.implicitWidth + 20
 
